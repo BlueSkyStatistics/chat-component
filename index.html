@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Component Dev</title>
+  </head>
+  <body>
+    <div id="chat-container"></div>
+    <script type="module">
+      import { initChatComponent } from '/src/main.jsx'
+      window.addEventListener('DOMContentLoaded', () => {
+        initChatComponent('chat-container')
+      })
+    </script>
+  </body>
+</html>
