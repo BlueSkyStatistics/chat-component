@@ -1,0 +1,76 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install asar
+        run: npm install -g asar
+
+      - name: Create archives
+        run: |
+          mkdir -p release
+          cp dist/chat-component.css dist/chat-component.umd.cjs release/
+          cd release
+          zip -r ../chat-component.zip ./*
+          asar pack . ../chat-component.asar
+          cd ..
+
+      - name: Increment version
+        id: version
+        run: |
+          # Get current version from package.json
+          current_version=$(node -p "require('./package.json').version")
+          # Increment patch version
+          new_version=$(node -e "
+            const v = '${current_version}'.split('.');
+            v[2] = parseInt(v[2] || 0) + 1;
+            console.log(v.join('.'));
+          ")
+          # Update package.json
+          sed -i "s/\"version\": \"${current_version}\"/\"version\": \"${new_version}\"/" package.json
+          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          # Commit version bump
+          git add package.json
+          git commit -m "chore: bump version to ${new_version}"
+          git push
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.new_version }}
+          name: Release v${{ steps.version.outputs.new_version }}
+          files: |
+            chat-component.zip
+            chat-component.asar
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target_commitish: main
