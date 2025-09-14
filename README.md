@@ -63,6 +63,70 @@ interface OutputElement {
 }
 ```
 
+### Custom Output Templates
+
+The chat component supports customizable templates for each type of output attachment. You can provide your own templates to customize how different types of attachments are rendered in the chat.
+
+#### Setting Up Custom Templates
+
+1. Create a directory for your templates (e.g., `templates`)
+2. Create template files with `.template` extension for each type you want to customize:
+   - `code.template` - for code attachments
+   - `chart.template` - for chart attachments
+   - `table.template` - for table attachments
+
+3. Pass the templates directory path to the Chat component:
+```jsx
+<Chat 
+  modelStorage={modelStorage} 
+  templatesPath="/path/to/your/templates" 
+/>
+```
+
+#### Template Syntax
+
+Templates use a simple variable substitution syntax with `{{variableName}}`. Available variables depend on the attachment type:
+
+##### Code Templates
+```
+// code.template example
+<pre class="custom-code">
+```{{language}}
+{{data}}
+```
+</pre>
+```
+Available variables:
+- `{{language}}` - programming language
+- `{{data}}` - code content
+- Any additional metadata fields
+
+##### Chart Templates
+```
+// chart.template example
+<div class="chart-wrapper">
+  <h3>{{title}}</h3>
+  <img src="{{data}}" alt="{{title}}" />
+</div>
+```
+Available variables:
+- `{{title}}` - chart title
+- `{{data}}` - image data URL
+- Any additional metadata fields
+
+##### Table Templates
+```
+// table.template example
+<div class="custom-table">
+  {{data}}
+</div>
+```
+Available variables:
+- `{{data}}` - table HTML content
+- Any additional metadata fields
+
+If a template file is not found, the component will fall back to the default built-in templates.
+
 ### Examples
 
 #### Adding Code Output

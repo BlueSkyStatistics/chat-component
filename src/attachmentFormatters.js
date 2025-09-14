@@ -1,23 +1,41 @@
-// Format code attachments into markdown code blocks
-export const formatCodeAttachment = (attachment) => {
-  return `\`\`\`${attachment.metadata.language || ''}\n${attachment.data}\n\`\`\``;
+// Initialize templates object in window if it doesn't exist
+if (typeof window !== 'undefined' && !window.attachmentTemplates) {
+  window.attachmentTemplates = '__PRELOADED_TEMPLATES__' in window ? { ...__PRELOADED_TEMPLATES__ } : {}
+    // Initialize with preloaded templates from Vite build
+}
+
+// Get template from window object or fallback to default
+const getTemplate = (type) => {
+  if (typeof window !== 'undefined' && window.attachmentTemplates[type]) {
+    return window.attachmentTemplates[type]
+  }
+  return defaultAttachmentTemplate[type] || null;
 };
 
-// Format chart attachments into markdown images
-export const formatChartAttachment = (attachment) => {
-  return `![${attachment.metadata.title || 'Chart'}](${attachment.data})`;
+// Allow runtime updates to templates
+export const setTemplate = (type, template) => {
+  if (typeof window !== 'undefined') {
+    window.attachmentTemplates = window.attachmentTemplates || {};
+    window.attachmentTemplates[type] = template;
+  }
 };
 
-// Format table attachments (keeping HTML structure)
-export const formatTableAttachment = (attachment) => {
-  return attachment.data;
+const applyTemplate = (template, data, metadata = {}) => {
+  let result = template;
+  // Replace metadata placeholders
+  for (const [key, value] of Object.entries(metadata)) {
+    result = result.replace(new RegExp(`{{${key}}}`, 'g'), value || '');
+  }
+  // Replace data placeholder
+  result = result.replace(/{{data}}/g, data);
+  return result;
 };
 
-// Map of attachment types to their formatters
-const attachmentFormatters = {
-  code: formatCodeAttachment,
-  chart: formatChartAttachment,
-  table: formatTableAttachment,
+// Map of attachment types to their default templates
+const defaultAttachmentTemplates = {
+  code: '```{{language}}\n{{data}}\n```',
+  chart: '![{{title}}]({{data}})',
+  table: '{{data}}',
 };
 
 /**
@@ -29,8 +47,9 @@ const attachmentFormatters = {
  * @returns {string} Formatted attachment string
  */
 export const formatAttachment = (attachment) => {
-  const formatter = attachmentFormatters[attachment.type];
-  return formatter ? formatter(attachment) : '';
+  const template = getTemplate(attachment.type);
+  console.log('Formatting attachment:', attachment, 'Using template:', template);
+  return template ? applyTemplate(template, attachment.data, attachment.metadata) : attachment.data;
 };
 
 /**
@@ -48,7 +67,7 @@ export const formatMessage = (message) => {
 
   const formattedAttachments = message.attachments
     .map(formatAttachment)
-    .filter(content => content !== '');
+    .filter(content => !!content);
 
   return {
     role: message.role,
