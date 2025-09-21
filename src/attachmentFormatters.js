@@ -7,7 +7,9 @@ if (typeof window !== 'undefined' && !window.attachmentTemplates) {
 // Get template from window object or fallback to default
 const getTemplate = (type) => {
   if (typeof window !== 'undefined' && window.attachmentTemplates[type]) {
-    return window.attachmentTemplates[type]
+    return typeof window.attachmentTemplates[type] === 'function' ? 
+      window.attachmentTemplates[type]() :
+      window.attachmentTemplates[type]
   }
   return defaultAttachmentTemplate[type] || null;
 };

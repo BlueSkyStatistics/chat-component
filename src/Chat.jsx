@@ -15,7 +15,8 @@ function Chat({modelStorage}) {
             content: 'Hi, how can I help you?',
             role: 'assistant',
             id: Date.now(),
-            showRaw: false
+            showRaw: false,
+            showAttachments: false
         }
     ])
     const [inputValue, setInputValue] = useState('')
@@ -165,6 +166,7 @@ function Chat({modelStorage}) {
             role: 'user',
             id: Date.now(),
             showRaw: false,
+            showAttachments: false,
             attachments: pendingAttachments
         }]
         setMessages(newMessages)
@@ -176,6 +178,7 @@ function Chat({modelStorage}) {
             role: 'assistant',
             id: Date.now() + 1,
             showRaw: false,
+            showAttachments: false,
             attachments: []
         }])
 
@@ -349,42 +352,65 @@ function Chat({modelStorage}) {
                             </button>
                         </div>
                         {message.attachments && message.attachments.length > 0 && (
-                            <div className="message-attachments">
-                                {message.attachments.map((attachment) => (
-                                    <div key={attachment.id} className={`attachment attachment-${attachment.type}`}>
-                                        {attachment.type === 'code' && (
-                                            <div className="code-block-wrapper">
-                                                <button
-                                                    className="code-copy-button"
-                                                    onClick={() => copyToClipboard(attachment.data)}
-                                                    title="Copy code"
-                                                >
-                                                    <svg viewBox="0 0 24 24" width="16" height="16">
-                                                        <path fill="currentColor"
-                                                              d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                    </svg>
-                                                </button>
-                                                <SyntaxHighlighter
-                                                    style={vscDarkPlus}
-                                                    language={attachment.metadata.language || 'plaintext'}
-                                                    PreTag="div"
-                                                >
-                                                    {attachment.data}
-                                                </SyntaxHighlighter>
+                            <div className="message-attachments-container">
+                                <button
+                                    className="attachments-toggle"
+                                    onClick={() => {
+                                        setMessages(prev => prev.map(msg =>
+                                            msg.id === message.id
+                                                ? { ...msg, showAttachments: !msg.showAttachments }
+                                                : msg
+                                        ))
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" width="16" height="16">
+                                        <path fill="currentColor" d={
+                                            message.showAttachments
+                                                ? "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"
+                                                : "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
+                                        }/>
+                                    </svg>
+                                    {message.attachments.length} Attachment{message.attachments.length !== 1 ? 's' : ''}
+                                </button>
+                                {message.showAttachments && (
+                                    <div className="message-attachments">
+                                        {message.attachments.map((attachment) => (
+                                            <div key={attachment.id} className={`attachment attachment-${attachment.type}`}>
+                                                {attachment.type === 'code' && (
+                                                    <div className="code-block-wrapper">
+                                                        <button
+                                                            className="code-copy-button"
+                                                            onClick={() => copyToClipboard(attachment.data)}
+                                                            title="Copy code"
+                                                        >
+                                                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                                                <path fill="currentColor"
+                                                                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                                            </svg>
+                                                        </button>
+                                                        <SyntaxHighlighter
+                                                            style={vscDarkPlus}
+                                                            language={attachment.metadata.language || 'plaintext'}
+                                                            PreTag="div"
+                                                        >
+                                                            {attachment.data}
+                                                        </SyntaxHighlighter>
+                                                    </div>
+                                                )}
+                                                {attachment.type === 'chart' && (
+                                                    <div className="chart-wrapper">
+                                                        <img src={attachment.data} alt={attachment.metadata.title || 'Chart'}/>
+                                                    </div>
+                                                )}
+                                                {attachment.type === 'table' && (
+                                                    <div className="table-wrapper">
+                                                        <div dangerouslySetInnerHTML={{__html: attachment.data}}/>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        {attachment.type === 'chart' && (
-                                            <div className="chart-wrapper">
-                                                <img src={attachment.data} alt={attachment.metadata.title || 'Chart'}/>
-                                            </div>
-                                        )}
-                                        {attachment.type === 'table' && (
-                                            <div className="table-wrapper">
-                                                <div dangerouslySetInnerHTML={{__html: attachment.data}}/>
-                                            </div>
-                                        )}
+                                        ))}
                                     </div>
-                                ))}
+                                )}
                             </div>
                         )}
 
@@ -437,7 +463,7 @@ function Chat({modelStorage}) {
                             )}
                         </div>
                         <div className="message-footer">
-                            {
+                            {/* {
                                 isStreaming &&
                                 message.role === 'assistant' && (
                                     <button
@@ -449,7 +475,7 @@ function Chat({modelStorage}) {
                                         </svg>
                                         {shouldAutoScroll ? 'Stop Following' : 'Follow Stream'}
                                     </button>
-                                )}
+                                )} */}
                         </div>
                     </div>
                 ))}

@@ -7,7 +7,7 @@ import { LocalStorageProvider, ModelStorageInterface } from './storage/modelStor
 let root = null;
 
 // Create a function to initialize the chat component
-function initChatComponent(containerId, modelStorage, getTemplate) {
+function initChatComponent(containerId, modelStorage) {
   const container = document.getElementById(containerId)
   if (container) {
     if (!root) {
