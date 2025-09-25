@@ -4,14 +4,21 @@ if (typeof window !== 'undefined' && !window.attachmentTemplates) {
     // Initialize with preloaded templates from Vite build
 }
 
+// Map of attachment types to their default templates
+const defaultAttachmentTemplates = {
+    code: '```{{language}}\n{{data}}\n```',
+    chart: '![{{title}}]({{data}})',
+    table: '{{data}}',
+};
+
 // Get template from window object or fallback to default
 const getTemplate = (type) => {
   if (typeof window !== 'undefined' && window.attachmentTemplates[type]) {
-    return typeof window.attachmentTemplates[type] === 'function' ? 
+    return typeof window.attachmentTemplates[type] === 'function' ?
       window.attachmentTemplates[type]() :
       window.attachmentTemplates[type]
   }
-  return defaultAttachmentTemplate[type] || null;
+  return defaultAttachmentTemplates[type] || null;
 };
 
 // Allow runtime updates to templates
@@ -31,13 +38,6 @@ const applyTemplate = (template, data, metadata = {}) => {
   // Replace data placeholder
   result = result.replace(/{{data}}/g, data);
   return result;
-};
-
-// Map of attachment types to their default templates
-const defaultAttachmentTemplates = {
-  code: '```{{language}}\n{{data}}\n```',
-  chart: '![{{title}}]({{data}})',
-  table: '{{data}}',
 };
 
 /**
