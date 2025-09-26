@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: false
+        default: 'latest'
+      increment_version:
+        default: false
+        description: 'Increment patch version'
+        required: false
+        type: boolean
 
 jobs:
   build-and-release:
@@ -41,7 +52,7 @@ jobs:
           cd ..
 
       - name: Increment version
-        id: version
+        if: ${{ github.event.inputs.increment_version == true || github.event_name != 'workflow_dispatch' }}
         run: |
           # Get current version from package.json
           current_version=$(node -p "require('./package.json').version")
@@ -53,7 +64,6 @@ jobs:
           ")
           # Update package.json
           sed -i "s/\"version\": \"${current_version}\"/\"version\": \"${new_version}\"/" package.json
-          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
           # Configure git
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -62,11 +72,17 @@ jobs:
           git commit -m "chore: bump version to ${new_version}"
           git push
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Get current version
+        id: version
+        run: |
+          current_version=$(node -p "require('./package.json').version")
+          echo "current_version=${current_version}" >> $GITHUB_OUTPUT
+
+      - name: GH Release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.new_version }}
-          name: Release v${{ steps.version.outputs.new_version }}
+          tag_name: ${{ github.event.inputs.release_tag || 'latest' }}
+          name: Release v${{ steps.version.outputs.current_version }}
           files: |
             chat-component.zip
             chat-component.asar
