@@ -8,6 +8,14 @@
   <body>
     <div id="chat-container"></div>
     <script type="module">
+      // Load Bootstrap and FontAwesome in dev mode
+      import 'bootstrap/dist/css/bootstrap.min.css';
+      import '@fortawesome/fontawesome-free/css/all.min.css';
+      import * as bootstrap from 'bootstrap/dist/js/bootstrap.bundle.min.js';
+      
+      // Make bootstrap available globally
+      window.bootstrap = bootstrap;
+      
       import { initChatComponent } from '/src/main.jsx'
       window.addEventListener('DOMContentLoaded', () => {
         initChatComponent('chat-container')

@@ -50,7 +50,12 @@ export default defineConfig({
           'react-dom': 'ReactDOM'
         }
       },
-      external: ['react', 'react-dom']
+      external: [
+        'react', 
+        'react-dom',
+        'bootstrap',
+        '@fortawesome/fontawesome-free'
+      ]
     }
   }
 })
