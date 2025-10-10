@@ -8,6 +8,7 @@ let root = null;
 
 // Create a function to initialize the chat component
 function initChatComponent(containerId, modelStorage) {
+  console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
     if (!root) {

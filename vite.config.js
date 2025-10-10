@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 import { readFileSync, readdirSync } from 'fs';
 import path from 'path';
+import packageJson from './package.json' with { type: 'json' };
 
 
 // Preload all templates during build time
@@ -18,7 +19,8 @@ const preloadTemplates = () => {
 
 export default defineConfig({
   define: {
-    '__PRELOADED_TEMPLATES__': JSON.stringify(preloadTemplates())
+    '__PRELOADED_TEMPLATES__': JSON.stringify(preloadTemplates()),
+    '__CHAT_VERSION__': JSON.stringify(packageJson.version)
   },
   plugins: [
     react({
