@@ -26,9 +26,12 @@ function Chat({modelStorage}) {
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+    const [showModelMenu, setShowModelMenu] = useState(false)
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
+    const inputRef = useRef(null)
+    const tooltipRefs = useRef([])
 
     // Handle scroll events to determine if we should auto-scroll
     const handleScroll = () => {
@@ -91,7 +94,17 @@ function Chat({modelStorage}) {
                 data: element.data,
                 metadata: element.metadata || {}
             }
-            setPendingAttachments(prev => [...prev, attachment])
+            setPendingAttachments(prev => {
+                const newAttachments = [...prev, attachment];
+                
+                // Feature 4: Set default message if first attachment and input is empty
+                if (prev.length === 0 && !inputValue.trim()) {
+                    setInputValue('Summarize my analysis');
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                }
+                
+                return newAttachments;
+            })
         };
 
         // For development/testing in browser environment
@@ -127,6 +140,43 @@ function Chat({modelStorage}) {
         ))
     }
 
+    // Helper functions for attachments
+    const getIconForType = (type) => {
+        switch(type) {
+            case 'code': return 'code';
+            case 'chart': return 'chart-bar';
+            case 'table': return 'table';
+            default: return 'file';
+        }
+    }
+
+    const getTooltipText = (attachment) => {
+        if (attachment.metadata.title) {
+            return attachment.metadata.title;
+        }
+        switch(attachment.type) {
+            case 'code':
+                return attachment.metadata.language ? `${attachment.metadata.language} code` : 'Code snippet';
+            case 'chart':
+                return 'Chart';
+            case 'table':
+                return 'Table';
+            default:
+                return attachment.type;
+        }
+    }
+
+    const groupAttachmentsByType = (attachments) => {
+        return attachments.reduce((groups, attachment) => {
+            const type = attachment.type;
+            if (!groups[type]) {
+                groups[type] = [];
+            }
+            groups[type].push(attachment);
+            return groups;
+        }, {});
+    }
+
     // Set up scroll event listener
     useEffect(() => {
         const chatMessages = chatMessagesRef.current;
@@ -142,6 +192,26 @@ function Chat({modelStorage}) {
             messagesEndRef.current.scrollIntoView({behavior: 'smooth'});
         }
     }, [messages, shouldAutoScroll]);
+
+    // Initialize Bootstrap tooltips for pending attachments
+    useEffect(() => {
+        if (typeof window.bootstrap !== 'undefined' && tooltipRefs.current.length > 0) {
+            tooltipRefs.current.forEach(el => {
+                if (el) {
+                    new window.bootstrap.Tooltip(el);
+                }
+            });
+        }
+        // Cleanup
+        return () => {
+            tooltipRefs.current.forEach(el => {
+                if (el) {
+                    const tooltip = window.bootstrap?.Tooltip?.getInstance(el);
+                    tooltip?.dispose();
+                }
+            });
+        };
+    }, [pendingAttachments]);
 
     const stopStreaming = () => {
         if (abortControllerRef.current) {
@@ -292,28 +362,43 @@ function Chat({modelStorage}) {
     return (
         <>
             <div className="chat-header">
-                <select
-                    className="model-selector"
-                    value={selectedModel ? makeModelId(selectedModel) : ''}
-                    onChange={(e) => {
-                        const newModel = models.find(m => makeModelId(m) === e.target.value)
-                        setSelectedModel(newModel)
-                        if (newModel) {
-                            localStorage.setItem('selectedModel', makeModelId(newModel))
-                        }
-                    }}
-                >
-                    {models.length === 0 && <option value="">No models configured</option>}
-                    {models.map((model, index) => (
-                        <option key={index} value={makeModelId(model)}>{model.name}</option>
-                    ))}
-                </select>
-                <button
-                    className="settings-button"
-                    onClick={() => setShowSettings(true)}
-                >
-                    Settings
-                </button>
+                <div className="dropdown">
+                    <button 
+                        className="btn btn-link p-1" 
+                        type="button" 
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <i className="fas fa-cog fa-lg text-secondary"></i>
+                    </button>
+                    <div className="dropdown-menu dropdown-menu-end">
+                        <div className="px-3 py-2" style={{minWidth: '250px'}}>
+                            <label className="form-label mb-1 small text-muted">Select Model</label>
+                            <select 
+                                className="form-select form-select-sm mb-2"
+                                value={selectedModel ? makeModelId(selectedModel) : ''}
+                                onChange={(e) => {
+                                    const newModel = models.find(m => makeModelId(m) === e.target.value)
+                                    setSelectedModel(newModel)
+                                }}
+                            >
+                                {models.length === 0 && <option value="">No models configured</option>}
+                                {models.map((model, index) => (
+                                    <option key={index} value={makeModelId(model)}>{model.name}</option>
+                                ))}
+                            </select>
+                            <button 
+                                className="btn btn-sm btn-primary w-100"
+                                onClick={() => {
+                                    setShowSettings(true);
+                                }}
+                            >
+                                <i className="fas fa-sliders-h me-2"></i>
+                                Configure Models
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="chat-messages" ref={chatMessagesRef}>
@@ -482,28 +567,64 @@ function Chat({modelStorage}) {
             </div>
 
             {pendingAttachments.length > 0 && (
-                <div className="pending-attachments">
-                    {pendingAttachments.map((attachment) => (
-                        <div key={attachment.id} className="pending-attachment">
-                            <span className="attachment-type">{attachment.type}</span>
-                            <button
-                                className="remove-attachment"
-                                onClick={() => setPendingAttachments(prev =>
-                                    prev.filter(a => a.id !== attachment.id)
-                                )}
-                                title="Remove attachment"
-                            >
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor"
-                                          d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/>
-                                </svg>
-                            </button>
-                        </div>
-                    ))}
+                <div className="pending-attachments-wrapper">
+                    <div className="accordion accordion-flush" id="attachmentAccordion">
+                        {Object.entries(groupAttachmentsByType(pendingAttachments)).map(([type, items]) => (
+                            <div className="accordion-item" key={type}>
+                                <h2 className="accordion-header">
+                                    <button 
+                                        className="accordion-button collapsed py-1 px-2" 
+                                        type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target={`#collapse-${type}`}
+                                        aria-expanded="false"
+                                    >
+                                        <i className={`fas fa-${getIconForType(type)} me-2`}></i>
+                                        <small className="me-2 text-capitalize">{type}</small>
+                                        <span className="badge bg-secondary badge-sm">{items.length}</span>
+                                    </button>
+                                </h2>
+                                <div 
+                                    id={`collapse-${type}`} 
+                                    className="accordion-collapse collapse"
+                                    data-bs-parent="#attachmentAccordion"
+                                >
+                                    <div className="accordion-body p-2">
+                                        <div className="list-group list-group-flush">
+                                            {items.map((attachment, index) => (
+                                                <div 
+                                                    key={attachment.id} 
+                                                    className="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1 px-2"
+                                                    ref={el => tooltipRefs.current[index] = el}
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-placement="top"
+                                                    title={getTooltipText(attachment)}
+                                                >
+                                                    <small className="text-truncate">
+                                                        {getTooltipText(attachment)}
+                                                    </small>
+                                                    <button
+                                                        className="btn btn-sm btn-link text-danger p-0 ms-2"
+                                                        onClick={() => setPendingAttachments(prev =>
+                                                            prev.filter(a => a.id !== attachment.id)
+                                                        )}
+                                                        title="Remove attachment"
+                                                    >
+                                                        <i className="fas fa-times fa-sm"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
             <form onSubmit={handleSubmit} className="chat-input-form">
                 <input
+                    ref={inputRef}
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}

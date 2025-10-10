@@ -345,12 +345,17 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
-.pending-attachments {
-    padding: 8px 16px;
-    border-top: 1px solid #ccc;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+/* Pending attachments wrapper - compact styling */
+.pending-attachments-wrapper {
+    padding: 8px 12px;
+    border-top: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+/* Small badge sizing */
+.badge-sm {
+    font-size: 0.7rem;
+    padding: 0.2em 0.5em;
 }
 
 .pending-attachment {
