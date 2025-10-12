@@ -88,16 +88,28 @@ function Chat({modelStorage}) {
     // Listen for output elements from Electron
     useEffect(() => {
         const handleOutput = (element) => {
-            const attachment = {
-                id: Date.now(),
-                type: element.type, // 'code', 'chart', 'table'
-                data: element.data,
-                metadata: element.metadata || {}
-            }
+            // Use element.id if provided, otherwise generate one
+            const itemId = element.id !== undefined ? element.id : Date.now() + Math.random();
+            
+            // Check if this ID already exists in pending attachments
             setPendingAttachments(prev => {
+                // If element has an id and it already exists, don't add it again
+                if (element.id !== undefined && prev.some(a => a.id === element.id)) {
+                    console.log(`Attachment with id "${element.id}" already exists, skipping.`);
+                    return prev;
+                }
+                
+                const attachment = {
+                    id: itemId,
+                    type: element.type, // 'code', 'chart', 'table'
+                    data: element.data,
+                    metadata: element.metadata || {},
+                    output: element.output || null // { id, title }
+                }
+                
                 const newAttachments = [...prev, attachment];
                 
-                // Feature 4: Set default message if first attachment and input is empty
+                // Set default message if first attachment and input is empty
                 if (prev.length === 0 && !inputValue.trim()) {
                     setInputValue('Summarize my analysis');
                     setTimeout(() => inputRef.current?.focus(), 0);
@@ -166,15 +178,29 @@ function Chat({modelStorage}) {
         }
     }
 
-    const groupAttachmentsByType = (attachments) => {
+    const groupAttachmentsByOutput = (attachments) => {
         return attachments.reduce((groups, attachment) => {
-            const type = attachment.type;
-            if (!groups[type]) {
-                groups[type] = [];
+            // Group by output.id if available, otherwise use 'ungrouped'
+            const outputId = attachment.output?.id || 'ungrouped';
+            if (!groups[outputId]) {
+                groups[outputId] = {
+                    title: attachment.output?.title || 'Attachments',
+                    items: []
+                };
             }
-            groups[type].push(attachment);
+            groups[outputId].items.push(attachment);
             return groups;
         }, {});
+    }
+
+    const removeAttachment = (attachmentId) => {
+        setPendingAttachments(prev => prev.filter(a => a.id !== attachmentId));
+    }
+
+    const removeOutputGroup = (outputId) => {
+        setPendingAttachments(prev => 
+            prev.filter(a => (a.output?.id || 'ungrouped') !== outputId)
+        );
     }
 
     // Set up scroll event listener
@@ -364,7 +390,7 @@ function Chat({modelStorage}) {
             <div className="chat-header">
                 <div className="dropdown">
                     <button 
-                        className="btn btn-link p-1" 
+                        className="btn btn-link btn-sm"
                         type="button" 
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
@@ -569,51 +595,71 @@ function Chat({modelStorage}) {
             {pendingAttachments.length > 0 && (
                 <div className="pending-attachments-wrapper">
                     <div className="accordion accordion-flush" id="attachmentAccordion">
-                        {Object.entries(groupAttachmentsByType(pendingAttachments)).map(([type, items]) => (
-                            <div className="accordion-item" key={type}>
+                        {Object.entries(groupAttachmentsByOutput(pendingAttachments)).map(([outputId, group]) => (
+                            <div className="accordion-item" key={outputId}>
                                 <h2 className="accordion-header">
                                     <button 
                                         className="accordion-button collapsed py-1 px-2" 
                                         type="button" 
                                         data-bs-toggle="collapse" 
-                                        data-bs-target={`#collapse-${type}`}
+                                        data-bs-target={`#collapse-${outputId}`}
                                         aria-expanded="false"
                                     >
-                                        <i className={`fas fa-${getIconForType(type)} me-2`}></i>
-                                        <small className="me-2 text-capitalize">{type}</small>
-                                        <span className="badge bg-secondary badge-sm">{items.length}</span>
+                                        <small className="me-2 fw-bold">{group.title}</small>
+                                        <span className="badge bg-secondary badge-sm">{group.items.length}</span>
+                                    </button>
+                                    <button
+                                        className="btn btn-sm btn-link text-danger p-0 ms-auto me-2"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeOutputGroup(outputId);
+                                        }}
+                                        title="Delete group"
+                                    >
+                                        <i className="fas fa-trash fa-sm"></i>
                                     </button>
                                 </h2>
                                 <div 
-                                    id={`collapse-${type}`} 
+                                    id={`collapse-${outputId}`} 
                                     className="accordion-collapse collapse"
                                     data-bs-parent="#attachmentAccordion"
                                 >
                                     <div className="accordion-body p-2">
-                                        <div className="list-group list-group-flush">
-                                            {items.map((attachment, index) => (
-                                                <div 
-                                                    key={attachment.id} 
-                                                    className="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1 px-2"
-                                                    ref={el => tooltipRefs.current[index] = el}
-                                                    data-bs-toggle="tooltip"
-                                                    data-bs-placement="top"
-                                                    title={getTooltipText(attachment)}
-                                                >
-                                                    <small className="text-truncate">
-                                                        {getTooltipText(attachment)}
-                                                    </small>
-                                                    <button
-                                                        className="btn btn-sm btn-link text-danger p-0 ms-2"
-                                                        onClick={() => setPendingAttachments(prev =>
-                                                            prev.filter(a => a.id !== attachment.id)
-                                                        )}
-                                                        title="Remove attachment"
-                                                    >
-                                                        <i className="fas fa-times fa-sm"></i>
-                                                    </button>
-                                                </div>
-                                            ))}
+                                        <div className="d-flex flex-column gap-2">
+                                            {group.items.map((attachment) => {
+                                                const itemTitle = attachment.metadata?.title || attachment.type;
+                                                const itemHref = attachment.metadata?.href;
+                                                
+                                                return (
+                                                    <div key={attachment.id} className="attachment-card card card-sm">
+                                                        <div className="card-body p-2 d-flex justify-content-between align-items-center">
+                                                            <div className="d-flex align-items-center flex-grow-1 min-w-0">
+                                                                <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted`}></i>
+                                                                {itemHref ? (
+                                                                    <a 
+                                                                        href={itemHref} 
+                                                                        className="text-decoration-none text-primary text-truncate"
+                                                                        title={itemTitle}
+                                                                    >
+                                                                        <small>{itemTitle}</small>
+                                                                    </a>
+                                                                ) : (
+                                                                    <small className="text-truncate" title={itemTitle}>
+                                                                        {itemTitle}
+                                                                    </small>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                className="btn btn-sm btn-link text-danger p-0 ms-2 flex-shrink-0"
+                                                                onClick={() => removeAttachment(attachment.id)}
+                                                                title="Remove item"
+                                                            >
+                                                                <i className="fas fa-times fa-sm"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>

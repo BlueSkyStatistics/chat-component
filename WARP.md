@@ -116,15 +116,35 @@ ModelStorageInterface (abstract)
 **OutputElement structure:**
 ```javascript
 {
+  id?: string | number, // Optional unique ID for duplicate detection
   type: 'code' | 'chart' | 'table',
   data: string,  // Code text, image data URL, or HTML table
   metadata: {
     language?: string,  // For code
-    title?: string,     // For charts
+    title?: string,     // Item title (displayed on card)
+    href?: string,      // Optional link URL (makes title clickable)
     // ... custom fields
+  },
+  output: {             // Optional grouping information
+    id: string,         // Unique identifier for this output group
+    title: string       // Display title for the group
   }
 }
 ```
+
+**Duplicate detection:**
+- If an element includes an `id` field, the component checks if an attachment with that ID already exists
+- If the ID exists, the new element is skipped (prevents duplicates)
+- If no `id` is provided, a unique ID is auto-generated and the element is always added
+- This allows Electron apps to safely re-send outputs without creating duplicates
+
+**Grouping behavior:**
+- Attachments with the same `output.id` are grouped together in a collapsible accordion
+- Each group displays as a Bootstrap card with the `output.title` as the header
+- Items within a group show as individual cards with titles from `metadata.title` or `type`
+- If `metadata.href` is provided, the item title becomes a clickable link
+- Both individual items and entire groups can be removed with delete buttons
+- Attachments without an `output` object are grouped under "Ungrouped Items"
 
 ### Message Flow
 
@@ -156,15 +176,54 @@ When integrating into an Electron app:
 ### Adding Output from Electron
 
 ```javascript
-// In renderer process
+// In renderer process - single ungrouped attachment
 window.electronApi.sendOutputToChat({
   type: 'code',
   data: '# Python code here',
-  metadata: { language: 'python' }
+  metadata: { 
+    language: 'python',
+    title: 'Data Analysis Script'
+  }
+});
+
+// Grouped attachments from same output with duplicate prevention
+const outputId = 'analysis-2024-01-01';
+const outputTitle = 'Analysis Results';
+
+window.electronApi.sendOutputToChat({
+  id: 'cell-1-output',  // Unique ID prevents duplicates
+  type: 'code',
+  data: 'import pandas as pd\n...',
+  metadata: { 
+    language: 'python',
+    title: 'Data Processing',
+    href: '#cell-1'  // Makes title clickable
+  },
+  output: { id: outputId, title: outputTitle }
+});
+
+window.electronApi.sendOutputToChat({
+  id: 'cell-2-output',  // Different ID for second item
+  type: 'chart',
+  data: 'data:image/png;base64,...',
+  metadata: { 
+    title: 'Revenue Chart',
+    href: '#cell-2'
+  },
+  output: { id: outputId, title: outputTitle }
+});
+
+// Re-sending with same ID won't create duplicate
+window.electronApi.sendOutputToChat({
+  id: 'cell-1-output',  // Same ID - will be skipped
+  type: 'code',
+  data: 'import pandas as pd\n...',
+  metadata: { language: 'python', title: 'Data Processing' },
+  output: { id: outputId, title: outputTitle }
 });
 ```
 
-This adds the output to pending attachments. User can remove them or send with next message.
+This adds the output to pending attachments. Grouped items appear together in a collapsible group. Users can remove individual items or entire groups, then send with their message.
 
 ## Styling
 
