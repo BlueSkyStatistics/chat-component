@@ -440,8 +440,34 @@
     background-color: #0056b3;
 }
 
+#attachmentAccordion {
+    flex-wrap: wrap;
+}
+
 #attachmentAccordion .accordion-header {
     display: flex;
     gap: 8px;
-    max-width: 200px;
+}
+
+.accordion-horizontal {
+  display: flex;
+}
+
+.accordion-horizontal .accordion-item {
+  flex: 1 1 0;
+  margin-right: 10px; /* adjust spacing between items */
+  max-width: 200px;
+}
+
+.accordion-horizontal .accordion-item:last-child {
+  margin-right: 0;
+}
+
+#attachmentAccordion .accordion-button {
+    gap: 4px
+}
+
+#attachmentAccordion .accordion-button::after {
+  width: 0.75rem;
+  height: 0.75rem;
 }

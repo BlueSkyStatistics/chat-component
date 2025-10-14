@@ -26,7 +26,6 @@ function Chat({modelStorage}) {
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
-    const [showModelMenu, setShowModelMenu] = useState(false)
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
@@ -106,6 +105,14 @@ function Chat({modelStorage}) {
                     metadata: element.metadata || {},
                     output: element.output || null // { id, title }
                 }
+                
+                // console.log('Chat component received:', {
+                //     'element.id': element.id,
+                //     'element.output': element.output,
+                //     'attachment.output': attachment.output,
+                //     'attachment.output?.id': attachment.output?.id,
+                //     'attachment.output?.title': attachment.output?.title
+                // });
                 
                 const newAttachments = [...prev, attachment];
                 
@@ -594,7 +601,7 @@ function Chat({modelStorage}) {
 
             {pendingAttachments.length > 0 && (
                 <div className="pending-attachments-wrapper">
-                    <div className="accordion accordion-flush" id="attachmentAccordion">
+                    <div className="accordion-horizontal accordion accordion-flush" id="attachmentAccordion">
                         {Object.entries(groupAttachmentsByOutput(pendingAttachments)).map(([outputId, group]) => (
                             <div className="accordion-item" key={outputId}>
                                 <h2 className="accordion-header">
