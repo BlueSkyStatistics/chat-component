@@ -450,17 +450,17 @@
 }
 
 .accordion-horizontal {
-  display: flex;
+    display: flex;
 }
 
 .accordion-horizontal .accordion-item {
-  flex: 1 1 0;
-  margin-right: 10px; /* adjust spacing between items */
-  max-width: 200px;
+    flex: 1 1 0;
+    margin-right: 10px; /* adjust spacing between items */
+    max-width: 200px;
 }
 
 .accordion-horizontal .accordion-item:last-child {
-  margin-right: 0;
+    margin-right: 0;
 }
 
 #attachmentAccordion .accordion-button {
@@ -468,6 +468,7 @@
 }
 
 #attachmentAccordion .accordion-button::after {
-  width: 0.75rem;
-  height: 0.75rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    background-size: 0.75rem;
 }

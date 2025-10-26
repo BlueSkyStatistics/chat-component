@@ -639,7 +639,7 @@ function Chat({modelStorage}) {
                                                 
                                                 return (
                                                     <div key={attachment.id} className="attachment-card card card-sm">
-                                                        <div className="card-body p-2 d-flex justify-content-between align-items-center">
+                                                        <div className="card-body p-1 d-flex justify-content-between align-items-center">
                                                             <div className="d-flex align-items-center flex-grow-1 min-w-0">
                                                                 <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted`}></i>
                                                                 {itemHref ? (
