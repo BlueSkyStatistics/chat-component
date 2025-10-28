@@ -1,11 +1,9 @@
 import {useState, useEffect, useRef} from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import {formatMessage} from './attachmentFormatters'
-import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
-import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import './Chat.css'
 import Settings from './Settings'
+import Message from './components/Message'
+import PendingAttachments from './components/PendingAttachments'
 
 const makeModelId = (model) => `${model.name}-${model.endpoint}`;
 
@@ -170,36 +168,6 @@ function Chat({modelStorage}) {
         }
     }
 
-    const getTooltipText = (attachment) => {
-        if (attachment.metadata.title) {
-            return attachment.metadata.title;
-        }
-        switch(attachment.type) {
-            case 'code':
-                return attachment.metadata.language ? `${attachment.metadata.language} code` : 'Code snippet';
-            case 'chart':
-                return 'Chart';
-            case 'table':
-                return 'Table';
-            default:
-                return attachment.type;
-        }
-    }
-
-    const groupAttachmentsByOutput = (attachments) => {
-        return attachments.reduce((groups, attachment) => {
-            // Group by output.id if available, otherwise use 'ungrouped'
-            const outputId = attachment.output?.id || 'ungrouped';
-            if (!groups[outputId]) {
-                groups[outputId] = {
-                    title: attachment.output?.title || 'Attachments',
-                    items: []
-                };
-            }
-            groups[outputId].items.push(attachment);
-            return groups;
-        }, {});
-    }
 
     const removeAttachment = (attachmentId) => {
         setPendingAttachments(prev => prev.filter(a => a.id !== attachmentId));
@@ -223,42 +191,12 @@ function Chat({modelStorage}) {
         });
     }
 
-    const renderAttachmentContent = (attachment) => {
-        return (
-            <div className="attachment-content-wrapper">
-                {attachment.type === 'code' && (
-                    <div className="code-block-wrapper">
-                        <button
-                            className="code-copy-button"
-                            onClick={() => copyToClipboard(attachment.data)}
-                            title="Copy code"
-                        >
-                            <svg viewBox="0 0 24 24" width="16" height="16">
-                                <path fill="currentColor"
-                                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                            </svg>
-                        </button>
-                        <SyntaxHighlighter
-                            style={vscDarkPlus}
-                            language={attachment.metadata.language || 'plaintext'}
-                            PreTag="div"
-                        >
-                            {attachment.data}
-                        </SyntaxHighlighter>
-                    </div>
-                )}
-                {attachment.type === 'chart' && (
-                    <div className="chart-wrapper">
-                        <img src={attachment.data} alt={attachment.metadata.title || 'Chart'}/>
-                    </div>
-                )}
-                {attachment.type === 'table' && (
-                    <div className="table-wrapper">
-                        <div dangerouslySetInnerHTML={{__html: attachment.data}}/>
-                    </div>
-                )}
-            </div>
-        );
+    const toggleMessageAttachments = (messageId) => {
+        setMessages(messages.map(msg =>
+            msg.id === messageId
+                ? { ...msg, showAttachments: !msg.showAttachments }
+                : msg
+        ))
     }
 
     // Set up scroll event listener
@@ -493,263 +431,29 @@ function Chat({modelStorage}) {
 
             <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.map((message) => (
-                    <div key={message.id} className={`message ${message.role}`}>
-                        <div className="message-actions">
-                            <button
-                                className="action-button"
-                                onClick={() => copyToClipboard(message.content)}
-                                title="Copy to clipboard"
-                            >
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor"
-                                          d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                </svg>
-                            </button>
-                            <button
-                                className="action-button"
-                                onClick={() => toggleMessageView(message.id)}
-                                title={message.showRaw ? "Show formatted" : "Show raw"}
-                            >
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor"
-                                          d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
-                                </svg>
-                            </button>
-                            <button
-                                className="action-button delete"
-                                onClick={() => deleteMessage(message.id)}
-                                title="Delete message"
-                            >
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor"
-                                          d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                </svg>
-                            </button>
-                        </div>
-                        {message.attachments && message.attachments.length > 0 && (
-                            <div className="message-attachments-container">
-                                <button
-                                    className="attachments-toggle"
-                                    onClick={() => {
-                                        setMessages(prev => prev.map(msg =>
-                                            msg.id === message.id
-                                                ? { ...msg, showAttachments: !msg.showAttachments }
-                                                : msg
-                                        ))
-                                    }}
-                                >
-                                    <svg viewBox="0 0 24 24" width="16" height="16">
-                                        <path fill="currentColor" d={
-                                            message.showAttachments
-                                                ? "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"
-                                                : "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
-                                        }/>
-                                    </svg>
-                                    {message.attachments.length} Attachment{message.attachments.length !== 1 ? 's' : ''}
-                                </button>
-                                {message.showAttachments && (
-                                    <div className="message-attachments">
-                                        {message.attachments.map((attachment) => {
-                                            const itemTitle = attachment.metadata?.title || attachment.type;
-                                            const itemHref = attachment.metadata?.href;
-                                            const isExpanded = expandedAttachments.has(attachment.id);
-                                            
-                                            return (
-                                                <div key={attachment.id} className="attachment-item">
-                                                    <div className="attachment-header">
-                                                        <div className="attachment-title-section">
-                                                            <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted`}></i>
-                                                            {itemHref ? (
-                                                                <a 
-                                                                    href={itemHref} 
-                                                                    className="attachment-title-link"
-                                                                    title={itemTitle}
-                                                                >
-                                                                    {itemTitle}
-                                                                </a>
-                                                            ) : (
-                                                                <span className="attachment-title" title={itemTitle}>
-                                                                    {itemTitle}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <button
-                                                            className="btn btn-sm btn-outline-secondary view-button"
-                                                            onClick={() => toggleAttachmentExpanded(attachment.id)}
-                                                            title={isExpanded ? 'Hide content' : 'View content'}
-                                                        >
-                                                            <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'}`}></i>
-                                                        </button>
-                                                    </div>
-                                                    {isExpanded && renderAttachmentContent(attachment)}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="message-content">
-                            {message.showRaw ? (
-                                <pre className="raw-content">{message.content}</pre>
-                            ) : (
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    components={{
-                                        code({node, inline, className, children, ...props}) {
-                                            const match = /language-(\w+)/.exec(className || '')
-                                            const codeString = String(children).replace(/\n$/, '')
-
-                                            if (!inline && match) {
-                                                return (
-                                                    <div className="code-block-wrapper">
-                                                        <button
-                                                            className="code-copy-button"
-                                                            onClick={() => copyToClipboard(codeString)}
-                                                            title="Copy code"
-                                                        >
-                                                            <svg viewBox="0 0 24 24" width="16" height="16">
-                                                                <path fill="currentColor"
-                                                                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                            </svg>
-                                                        </button>
-                                                        <SyntaxHighlighter
-                                                            style={vscDarkPlus}
-                                                            language={match[1]}
-                                                            PreTag="div"
-                                                            {...props}
-                                                        >
-                                                            {codeString}
-                                                        </SyntaxHighlighter>
-                                                    </div>
-                                                )
-                                            }
-
-                                            return (
-                                                <code className={className} {...props}>
-                                                    {children}
-                                                </code>
-                                            )
-                                        }
-                                    }}
-                                >
-                                    {message.content}
-                                </ReactMarkdown>
-                            )}
-                        </div>
-                        <div className="message-footer">
-                            {/* {
-                                isStreaming &&
-                                message.role === 'assistant' && (
-                                    <button
-                                        className="follow-stream-button"
-                                        onClick={() => setShouldAutoScroll(prevState => !prevState)}
-                                    >
-                                        <svg viewBox="0 0 24 24" width="16" height="16">
-                                            <path fill="currentColor" d="M16 13h-3V3h-2v10H8l4 4 4-4zM4 19v2h16v-2H4z"/>
-                                        </svg>
-                                        {shouldAutoScroll ? 'Stop Following' : 'Follow Stream'}
-                                    </button>
-                                )} */}
-                        </div>
-                    </div>
+                    <Message
+                        key={message.id}
+                        message={message}
+                        expandedAttachments={expandedAttachments}
+                        onCopy={copyToClipboard}
+                        onDelete={deleteMessage}
+                        onToggleView={toggleMessageView}
+                        onToggleAttachments={toggleMessageAttachments}
+                        onToggleAttachmentExpand={toggleAttachmentExpanded}
+                        getIconForType={getIconForType}
+                    />
                 ))}
             </div>
 
-            {pendingAttachments.length > 0 && (
-                <div className="pending-attachments-wrapper">
-                    <div className="accordion-horizontal accordion accordion-flush" id="attachmentAccordion">
-                        {Object.entries(groupAttachmentsByOutput(pendingAttachments)).map(([outputId, group]) => (
-                            <div className="accordion-item" key={outputId}>
-                                <h2 className="accordion-header">
-                                    <button 
-                                        className="accordion-button collapsed py-1 px-2" 
-                                        type="button" 
-                                        data-bs-toggle="collapse" 
-                                        data-bs-target={`#collapse-${outputId}`}
-                                        aria-expanded="false"
-                                        title={group.title}
-                                    >
-                                        <small className="me-2 fw-bold text-truncate group-title">{group.title}</small>
-                                        <span className="badge bg-secondary badge-sm flex-shrink-0">{group.items.length}</span>
-                                    </button>
-                                    <button
-                                        className="btn btn-sm btn-link text-danger p-0 group-delete-btn"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeOutputGroup(outputId);
-                                        }}
-                                        title="Delete group"
-                                    >
-                                        <i className="fas fa-trash fa-sm"></i>
-                                    </button>
-                                </h2>
-                                <div 
-                                    id={`collapse-${outputId}`} 
-                                    className="accordion-collapse collapse"
-                                    data-bs-parent="#attachmentAccordion"
-                                >
-                                    <div className="accordion-body p-2">
-                                        <div className="d-flex flex-column gap-2">
-                                            {group.items.map((attachment) => {
-                                                const itemTitle = attachment.metadata?.title || attachment.type;
-                                                const itemHref = attachment.metadata?.href;
-                                                
-                                                const isExpanded = expandedAttachments.has(attachment.id);
-                                                
-                                                return (
-                                                    <div key={attachment.id} className="pending-attachment-card">
-                                                        <div className="pending-attachment-header">
-                                                            <div className="d-flex align-items-center flex-grow-1 min-w-0">
-                                                                <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted flex-shrink-0`}></i>
-                                                                {itemHref ? (
-                                                                    <a 
-                                                                        href={itemHref} 
-                                                                        className="text-decoration-none text-primary text-truncate"
-                                                                        title={itemTitle}
-                                                                    >
-                                                                        <small>{itemTitle}</small>
-                                                                    </a>
-                                                                ) : (
-                                                                    <small className="text-truncate" title={itemTitle}>
-                                                                        {itemTitle}
-                                                                    </small>
-                                                                )}
-                                                            </div>
-                                                            <div className="d-flex gap-1 flex-shrink-0 ms-2">
-                                                                <button
-                                                                    className="btn btn-sm btn-outline-secondary px-1 py-0"
-                                                                    onClick={() => toggleAttachmentExpanded(attachment.id)}
-                                                                    title={isExpanded ? 'Hide content' : 'View content'}
-                                                                >
-                                                                    <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'}`}></i>
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-sm btn-link text-danger p-0"
-                                                                    onClick={() => removeAttachment(attachment.id)}
-                                                                    title="Remove item"
-                                                                >
-                                                                    <i className="fas fa-times fa-sm"></i>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        {isExpanded && (
-                                                            <div className="pending-attachment-content">
-                                                                {renderAttachmentContent(attachment)}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+            <PendingAttachments
+                attachments={pendingAttachments}
+                expandedAttachments={expandedAttachments}
+                onToggleExpand={toggleAttachmentExpanded}
+                onRemoveAttachment={removeAttachment}
+                onRemoveGroup={removeOutputGroup}
+                onCopy={copyToClipboard}
+                getIconForType={getIconForType}
+            />
             <form onSubmit={handleSubmit} className="chat-input-form">
                 <input
                     ref={inputRef}
