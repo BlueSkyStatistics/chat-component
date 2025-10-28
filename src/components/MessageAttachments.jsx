@@ -12,9 +12,9 @@ function MessageAttachments({
     if (!attachments || attachments.length === 0) return null
 
     return (
-        <div className="message-attachments-container">
+        <div className="message-attachments-container mt-2">
             <button
-                className="attachments-toggle"
+                className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
                 onClick={onToggleShow}
             >
                 <svg viewBox="0 0 24 24" width="16" height="16">
@@ -24,10 +24,10 @@ function MessageAttachments({
                             : "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
                     }/>
                 </svg>
-                {attachments.length} Attachment{attachments.length !== 1 ? 's' : ''}
+                <span>{attachments.length} Attachment{attachments.length !== 1 ? 's' : ''}</span>
             </button>
             {showAttachments && (
-                <div className="message-attachments">
+                <div className="d-flex flex-column gap-2 mt-2">
                     {attachments.map((attachment) => (
                         <AttachmentItem
                             key={attachment.id}

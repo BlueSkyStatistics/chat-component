@@ -17,36 +17,38 @@ function Message({
     return (
         <div className={`message ${message.role}`}>
             <div className="message-actions">
-                <button
-                    className="action-button"
-                    onClick={() => onCopy(message.content)}
-                    title="Copy to clipboard"
-                >
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path fill="currentColor"
-                              d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                    </svg>
-                </button>
-                <button
-                    className="action-button"
-                    onClick={() => onToggleView(message.id)}
-                    title={message.showRaw ? "Show formatted" : "Show raw"}
-                >
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path fill="currentColor"
-                              d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
-                    </svg>
-                </button>
-                <button
-                    className="action-button delete"
-                    onClick={() => onDelete(message.id)}
-                    title="Delete message"
-                >
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path fill="currentColor"
-                              d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                    </svg>
-                </button>
+                <div className="btn-group btn-group-sm shadow-sm" role="group">
+                    <button
+                        className="btn btn-light"
+                        onClick={() => onCopy(message.content)}
+                        title="Copy to clipboard"
+                    >
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor"
+                                  d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                        </svg>
+                    </button>
+                    <button
+                        className="btn btn-light"
+                        onClick={() => onToggleView(message.id)}
+                        title={message.showRaw ? "Show formatted" : "Show raw"}
+                    >
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor"
+                                  d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                        </svg>
+                    </button>
+                    <button
+                        className="btn btn-light text-danger"
+                        onClick={() => onDelete(message.id)}
+                        title="Delete message"
+                    >
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor"
+                                  d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <MessageAttachments

@@ -3,7 +3,7 @@ import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 function AttachmentContent({ attachment, onCopy }) {
     return (
-        <div className="attachment-content-wrapper">
+        <div className="px-3 pb-3" style={{animation: 'slideDown 0.2s ease'}}>
             {attachment.type === 'code' && (
                 <div className="code-block-wrapper">
                     <button

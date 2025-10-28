@@ -389,18 +389,18 @@ function Chat({modelStorage}) {
 
     return (
         <>
-            <div className="chat-header">
+            <div className="d-flex justify-content-end align-items-center border-bottom py-1 px-2">
                 <div className="dropdown">
                     <button 
-                        className="btn btn-link btn-sm"
+                        className="btn btn-link btn-sm p-1"
                         type="button" 
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
                     >
                         <i className="fas fa-cog fa-lg text-secondary"></i>
                     </button>
-                    <div className="dropdown-menu dropdown-menu-end">
-                        <div className="px-3 py-2" style={{minWidth: '250px'}}>
+                    <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
+                        <div className="px-3 py-2">
                             <label className="form-label mb-1 small text-muted">Select Model</label>
                             <select 
                                 className="form-select form-select-sm mb-2"
@@ -429,7 +429,7 @@ function Chat({modelStorage}) {
                 </div>
             </div>
 
-            <div className="chat-messages" ref={chatMessagesRef}>
+            <div className="flex-grow-1 p-3 overflow-auto" style={{scrollBehavior: 'smooth', overscrollBehavior: 'contain'}} ref={chatMessagesRef}>
                 {messages.map((message) => (
                     <Message
                         key={message.id}
@@ -454,24 +454,26 @@ function Chat({modelStorage}) {
                 onCopy={copyToClipboard}
                 getIconForType={getIconForType}
             />
-            <form onSubmit={handleSubmit} className="chat-input-form">
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type a message..."
-                    className="chat-input"
-                />
-
-                <button
-                    type="submit"
-                    className={`chat-submit ${isStreaming ? 'streaming' : ''}`}
-                    onClick={isStreaming ? stopStreaming : undefined}
-                    title={isStreaming ? "Stop streaming" : "Send message"}
-                >
-                    {isStreaming ? 'Stop' : 'Send'}
-                </button>
+            <form onSubmit={handleSubmit} className="border-top p-3">
+                <div className="input-group">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        placeholder="Type a message..."
+                        className="form-control"
+                    />
+                    <button
+                        type="submit"
+                        className={`btn ${isStreaming ? 'btn-danger' : 'btn-primary'}`}
+                        onClick={isStreaming ? stopStreaming : undefined}
+                        title={isStreaming ? "Stop streaming" : "Send message"}
+                    >
+                        <i className={`fas fa-${isStreaming ? 'stop' : 'paper-plane'} me-2`}></i>
+                        {isStreaming ? 'Stop' : 'Send'}
+                    </button>
+                </div>
             </form>
             <div ref={messagesEndRef}/>
             {showSettings && (

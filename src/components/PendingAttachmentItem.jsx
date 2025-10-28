@@ -13,7 +13,7 @@ function PendingAttachmentItem({
 
     return (
         <div className="pending-attachment-card">
-            <div className="pending-attachment-header">
+            <div className="d-flex justify-content-between align-items-center p-2 bg-light">
                 <div className="d-flex align-items-center flex-grow-1 min-w-0">
                     <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted flex-shrink-0`}></i>
                     {itemHref ? (
@@ -48,7 +48,7 @@ function PendingAttachmentItem({
                 </div>
             </div>
             {isExpanded && (
-                <div className="pending-attachment-content">
+                <div className="p-2 bg-white border-top" style={{maxHeight: '400px', overflowY: 'auto', animation: 'slideDown 0.2s ease'}}>
                     <AttachmentContent attachment={attachment} onCopy={onCopy} />
                 </div>
             )}

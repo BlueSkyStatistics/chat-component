@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import './Settings.css'
 
 const initialModelSettings = {
   name: '', 
@@ -29,59 +28,99 @@ function Settings({ models, onSave, onClose }) {
   }
 
   return (
-    <div className="settings-overlay">
-      <div className="settings-panel">
-        <h2>AI Model Settings</h2>
-        
-        <div className="settings-content">
-          <div className="model-list">
-            <h3>Configured Models</h3>
-            {modelList.map((model, index) => (
-              <div key={index} className="model-item">
-                <div className="model-info">
-                  <div>{model.name}</div>
-                  <div className="model-endpoint">{model.endpoint}</div>
-                </div>
-                <button 
-                  onClick={() => handleRemoveModel(index)}
-                  className="remove-model-btn"
-                >
-                  Remove
-                </button>
+    <>
+      {/* Bootstrap Modal Backdrop */}
+      <div className="modal-backdrop fade show" style={{zIndex: 1040}}></div>
+      
+      {/* Bootstrap Modal */}
+      <div className="modal d-block" tabIndex="-1" style={{zIndex: 1050}}>
+        <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">AI Model Settings</h5>
+              <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
+            </div>
+            
+            <div className="modal-body">
+              {/* Configured Models List */}
+              <div className="mb-4">
+                <h6 className="mb-3">Configured Models</h6>
+                {modelList.length === 0 ? (
+                  <p className="text-muted small">No models configured yet.</p>
+                ) : (
+                  <div className="d-flex flex-column gap-2">
+                    {modelList.map((model, index) => (
+                      <div key={index} className="card">
+                        <div className="card-body p-3">
+                          <div className="d-flex justify-content-between align-items-start">
+                            <div className="flex-grow-1">
+                              <div className="fw-semibold">{model.name}</div>
+                              <div className="text-muted small">{model.endpoint}</div>
+                            </div>
+                            <button 
+                              onClick={() => handleRemoveModel(index)}
+                              className="btn btn-danger btn-sm ms-3"
+                            >
+                              <i className="fas fa-trash-alt"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
 
-          <div className="add-model-form">
-            <h3>Add New Model</h3>
-            <input
-              type="text"
-              placeholder="Model Name"
-              value={newModel.name}
-              onChange={(e) => setNewModel({ ...newModel, name: e.target.value })}
-            />
-            <input
-              type="text"
-              placeholder="Endpoint URL"
-              value={newModel.endpoint}
-              onChange={(e) => setNewModel({ ...newModel, endpoint: e.target.value })}
-            />
-            <input
-              type="password"
-              placeholder="API Key (optional)"
-              value={newModel.apiKey}
-              onChange={(e) => setNewModel({ ...newModel, apiKey: e.target.value })}
-            />
-            <button onClick={handleAddModel}>Add Model</button>
-          </div>
-        </div>
+              {/* Add New Model Form */}
+              <div>
+                <h6 className="mb-3">Add New Model</h6>
+                <div className="d-flex flex-column gap-3">
+                  <div>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Model Name"
+                      value={newModel.name}
+                      onChange={(e) => setNewModel({ ...newModel, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Endpoint URL"
+                      value={newModel.endpoint}
+                      onChange={(e) => setNewModel({ ...newModel, endpoint: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      className="form-control"
+                      placeholder="API Key (optional)"
+                      value={newModel.apiKey}
+                      onChange={(e) => setNewModel({ ...newModel, apiKey: e.target.value })}
+                    />
+                  </div>
+                  <button 
+                    onClick={handleAddModel} 
+                    className="btn btn-primary"
+                    disabled={!newModel.name || !newModel.endpoint}
+                  >
+                    <i className="fas fa-plus me-2"></i>Add Model
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        <div className="settings-actions">
-          <button onClick={handleSave} className="save-btn">Save</button>
-          <button onClick={onClose} className="cancel-btn">Cancel</button>
+            <div className="modal-footer">
+              <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+              <button onClick={handleSave} className="btn btn-success">Save</button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
