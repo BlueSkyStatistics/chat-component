@@ -26,6 +26,7 @@ function Chat({modelStorage}) {
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+    const [expandedAttachments, setExpandedAttachments] = useState(new Set())
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
@@ -207,6 +208,56 @@ function Chat({modelStorage}) {
     const removeOutputGroup = (outputId) => {
         setPendingAttachments(prev => 
             prev.filter(a => (a.output?.id || 'ungrouped') !== outputId)
+        );
+    }
+
+    const toggleAttachmentExpanded = (attachmentId) => {
+        setExpandedAttachments(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(attachmentId)) {
+                newSet.delete(attachmentId);
+            } else {
+                newSet.add(attachmentId);
+            }
+            return newSet;
+        });
+    }
+
+    const renderAttachmentContent = (attachment) => {
+        return (
+            <div className="attachment-content-wrapper">
+                {attachment.type === 'code' && (
+                    <div className="code-block-wrapper">
+                        <button
+                            className="code-copy-button"
+                            onClick={() => copyToClipboard(attachment.data)}
+                            title="Copy code"
+                        >
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor"
+                                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                        </button>
+                        <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={attachment.metadata.language || 'plaintext'}
+                            PreTag="div"
+                        >
+                            {attachment.data}
+                        </SyntaxHighlighter>
+                    </div>
+                )}
+                {attachment.type === 'chart' && (
+                    <div className="chart-wrapper">
+                        <img src={attachment.data} alt={attachment.metadata.title || 'Chart'}/>
+                    </div>
+                )}
+                {attachment.type === 'table' && (
+                    <div className="table-wrapper">
+                        <div dangerouslySetInnerHTML={{__html: attachment.data}}/>
+                    </div>
+                )}
+            </div>
         );
     }
 
@@ -498,41 +549,42 @@ function Chat({modelStorage}) {
                                 </button>
                                 {message.showAttachments && (
                                     <div className="message-attachments">
-                                        {message.attachments.map((attachment) => (
-                                            <div key={attachment.id} className={`attachment attachment-${attachment.type}`}>
-                                                {attachment.type === 'code' && (
-                                                    <div className="code-block-wrapper">
+                                        {message.attachments.map((attachment) => {
+                                            const itemTitle = attachment.metadata?.title || attachment.type;
+                                            const itemHref = attachment.metadata?.href;
+                                            const isExpanded = expandedAttachments.has(attachment.id);
+                                            
+                                            return (
+                                                <div key={attachment.id} className="attachment-item">
+                                                    <div className="attachment-header">
+                                                        <div className="attachment-title-section">
+                                                            <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted`}></i>
+                                                            {itemHref ? (
+                                                                <a 
+                                                                    href={itemHref} 
+                                                                    className="attachment-title-link"
+                                                                    title={itemTitle}
+                                                                >
+                                                                    {itemTitle}
+                                                                </a>
+                                                            ) : (
+                                                                <span className="attachment-title" title={itemTitle}>
+                                                                    {itemTitle}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <button
-                                                            className="code-copy-button"
-                                                            onClick={() => copyToClipboard(attachment.data)}
-                                                            title="Copy code"
+                                                            className="btn btn-sm btn-outline-secondary view-button"
+                                                            onClick={() => toggleAttachmentExpanded(attachment.id)}
+                                                            title={isExpanded ? 'Hide content' : 'View content'}
                                                         >
-                                                            <svg viewBox="0 0 24 24" width="16" height="16">
-                                                                <path fill="currentColor"
-                                                                      d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                            </svg>
+                                                            <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'}`}></i>
                                                         </button>
-                                                        <SyntaxHighlighter
-                                                            style={vscDarkPlus}
-                                                            language={attachment.metadata.language || 'plaintext'}
-                                                            PreTag="div"
-                                                        >
-                                                            {attachment.data}
-                                                        </SyntaxHighlighter>
                                                     </div>
-                                                )}
-                                                {attachment.type === 'chart' && (
-                                                    <div className="chart-wrapper">
-                                                        <img src={attachment.data} alt={attachment.metadata.title || 'Chart'}/>
-                                                    </div>
-                                                )}
-                                                {attachment.type === 'table' && (
-                                                    <div className="table-wrapper">
-                                                        <div dangerouslySetInnerHTML={{__html: attachment.data}}/>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                                    {isExpanded && renderAttachmentContent(attachment)}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -644,9 +696,11 @@ function Chat({modelStorage}) {
                                                 const itemTitle = attachment.metadata?.title || attachment.type;
                                                 const itemHref = attachment.metadata?.href;
                                                 
+                                                const isExpanded = expandedAttachments.has(attachment.id);
+                                                
                                                 return (
-                                                    <div key={attachment.id} className="attachment-card card card-sm">
-                                                        <div className="card-body p-1 d-flex justify-content-between align-items-center">
+                                                    <div key={attachment.id} className="pending-attachment-card">
+                                                        <div className="pending-attachment-header">
                                                             <div className="d-flex align-items-center flex-grow-1 min-w-0">
                                                                 <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted flex-shrink-0`}></i>
                                                                 {itemHref ? (
@@ -663,14 +717,28 @@ function Chat({modelStorage}) {
                                                                     </small>
                                                                 )}
                                                             </div>
-                                                            <button
-                                                                className="btn btn-sm btn-link text-danger p-0 ms-2 flex-shrink-0"
-                                                                onClick={() => removeAttachment(attachment.id)}
-                                                                title="Remove item"
-                                                            >
-                                                                <i className="fas fa-times fa-sm"></i>
-                                                            </button>
+                                                            <div className="d-flex gap-1 flex-shrink-0 ms-2">
+                                                                <button
+                                                                    className="btn btn-sm btn-outline-secondary px-1 py-0"
+                                                                    onClick={() => toggleAttachmentExpanded(attachment.id)}
+                                                                    title={isExpanded ? 'Hide content' : 'View content'}
+                                                                >
+                                                                    <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'}`}></i>
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-sm btn-link text-danger p-0"
+                                                                    onClick={() => removeAttachment(attachment.id)}
+                                                                    title="Remove item"
+                                                                >
+                                                                    <i className="fas fa-times fa-sm"></i>
+                                                                </button>
+                                                            </div>
                                                         </div>
+                                                        {isExpanded && (
+                                                            <div className="pending-attachment-content">
+                                                                {renderAttachmentContent(attachment)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
