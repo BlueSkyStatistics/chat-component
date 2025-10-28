@@ -30,7 +30,6 @@ function Chat({modelStorage}) {
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
     const inputRef = useRef(null)
-    const tooltipRefs = useRef([])
 
     // Handle scroll events to determine if we should auto-scroll
     const handleScroll = () => {
@@ -103,7 +102,8 @@ function Chat({modelStorage}) {
                     type: element.type, // 'code', 'chart', 'table'
                     data: element.data,
                     metadata: element.metadata || {},
-                    output: element.output || null // { id, title }
+                    output: element.output || null, // { id, title }
+                    initialMessage: element.initialMessage,
                 }
                 
                 // console.log('Chat component received:', {
@@ -117,8 +117,8 @@ function Chat({modelStorage}) {
                 const newAttachments = [...prev, attachment];
                 
                 // Set default message if first attachment and input is empty
-                if (prev.length === 0 && !inputValue.trim()) {
-                    setInputValue('Summarize my analysis');
+                if (attachment.initialMessage && prev.length === 0 && !inputValue.trim()) {
+                    setInputValue(attachment.initialMessage);
                     setTimeout(() => inputRef.current?.focus(), 0);
                 }
                 
@@ -228,22 +228,28 @@ function Chat({modelStorage}) {
 
     // Initialize Bootstrap tooltips for pending attachments
     useEffect(() => {
-        if (typeof window.bootstrap !== 'undefined' && tooltipRefs.current.length > 0) {
-            tooltipRefs.current.forEach(el => {
+        if (typeof window.bootstrap !== 'undefined') {
+            // Initialize tooltips for accordion buttons with group titles
+            const accordionButtons = document.querySelectorAll('#attachmentAccordion .accordion-button[title]');
+            const tooltipInstances = [];
+            
+            accordionButtons.forEach(el => {
                 if (el) {
-                    new window.bootstrap.Tooltip(el);
+                    const tooltip = new window.bootstrap.Tooltip(el, {
+                        trigger: 'hover',
+                        placement: 'top'
+                    });
+                    tooltipInstances.push(tooltip);
                 }
             });
-        }
-        // Cleanup
-        return () => {
-            tooltipRefs.current.forEach(el => {
-                if (el) {
-                    const tooltip = window.bootstrap?.Tooltip?.getInstance(el);
+            
+            // Cleanup
+            return () => {
+                tooltipInstances.forEach(tooltip => {
                     tooltip?.dispose();
-                }
-            });
-        };
+                });
+            };
+        }
     }, [pendingAttachments]);
 
     const stopStreaming = () => {
@@ -611,12 +617,13 @@ function Chat({modelStorage}) {
                                         data-bs-toggle="collapse" 
                                         data-bs-target={`#collapse-${outputId}`}
                                         aria-expanded="false"
+                                        title={group.title}
                                     >
-                                        <small className="me-2 fw-bold">{group.title}</small>
-                                        <span className="badge bg-secondary badge-sm">{group.items.length}</span>
+                                        <small className="me-2 fw-bold text-truncate group-title">{group.title}</small>
+                                        <span className="badge bg-secondary badge-sm flex-shrink-0">{group.items.length}</span>
                                     </button>
                                     <button
-                                        className="btn btn-sm btn-link text-danger p-0 ms-auto me-2"
+                                        className="btn btn-sm btn-link text-danger p-0 group-delete-btn"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             removeOutputGroup(outputId);
@@ -641,7 +648,7 @@ function Chat({modelStorage}) {
                                                     <div key={attachment.id} className="attachment-card card card-sm">
                                                         <div className="card-body p-1 d-flex justify-content-between align-items-center">
                                                             <div className="d-flex align-items-center flex-grow-1 min-w-0">
-                                                                <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted`}></i>
+                                                                <i className={`fas fa-${getIconForType(attachment.type)} me-2 text-muted flex-shrink-0`}></i>
                                                                 {itemHref ? (
                                                                     <a 
                                                                         href={itemHref} 

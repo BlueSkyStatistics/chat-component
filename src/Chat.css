@@ -52,6 +52,7 @@
     overflow-x: auto;
     display: flex;
     flex-direction: column;
+    min-height: 2.3rem;
 }
 
 .message:hover .message-actions {
@@ -346,11 +347,30 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* Pending attachments wrapper - compact styling */
+/* Pending attachments wrapper - compact styling with horizontal scroll */
 .pending-attachments-wrapper {
     padding: 8px 12px;
     border-top: 1px solid #dee2e6;
     background-color: #f8f9fa;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.pending-attachments-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+
+.pending-attachments-wrapper::-webkit-scrollbar-track {
+    background: #e9ecef;
+}
+
+.pending-attachments-wrapper::-webkit-scrollbar-thumb {
+    background: #adb5bd;
+    border-radius: 4px;
+}
+
+.pending-attachments-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #6c757d;
 }
 
 /* Small badge sizing */
@@ -441,22 +461,25 @@
 }
 
 #attachmentAccordion {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    min-width: min-content;
 }
 
 #attachmentAccordion .accordion-header {
     display: flex;
     gap: 8px;
+    align-items: center;
 }
 
 .accordion-horizontal {
     display: flex;
+    gap: 10px;
 }
 
 .accordion-horizontal .accordion-item {
-    flex: 1 1 0;
-    margin-right: 10px; /* adjust spacing between items */
-    max-width: 200px;
+    flex: 0 0 auto;
+    min-width: 180px;
+    max-width: 250px;
 }
 
 .accordion-horizontal .accordion-item:last-child {
@@ -464,11 +487,44 @@
 }
 
 #attachmentAccordion .accordion-button {
-    gap: 4px
+    gap: 4px;
+    padding-right: 32px !important; /* Make space for delete button */
 }
 
 #attachmentAccordion .accordion-button::after {
     width: 0.75rem;
     height: 0.75rem;
     background-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* Group title with ellipsis */
+.group-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 150px;
+}
+
+/* Group delete button positioning */
+.group-delete-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.group-delete-btn:hover {
+    opacity: 1;
+}
+
+.accordion-item:hover .group-delete-btn {
+    opacity: 1;
+}
+
+#attachmentAccordion .accordion-header {
+    position: relative;
 }
