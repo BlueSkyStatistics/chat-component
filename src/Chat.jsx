@@ -152,6 +152,13 @@ function Chat({modelStorage}) {
         setMessages(messages.filter(msg => msg.id !== messageId))
     }
 
+    const clearConversation = () => {
+        // if (window.confirm('Are you sure you want to clear the entire conversation? This action cannot be undone.')) {
+            setMessages([])
+            setPendingAttachments([])
+        // }
+    }
+
     const toggleMessageView = (messageId) => {
         setMessages(messages.map(msg =>
             msg.id === messageId ? {...msg, showRaw: !msg.showRaw} : msg
@@ -389,41 +396,57 @@ function Chat({modelStorage}) {
 
     return (
         <>
-            <div className="d-flex justify-content-end align-items-center border-bottom py-1 px-2">
-                <div className="dropdown">
-                    <button 
-                        className="btn btn-link btn-sm p-1"
-                        type="button" 
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
-                    >
-                        <i className="fas fa-cog fa-lg text-secondary"></i>
-                    </button>
-                    <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
-                        <div className="px-3 py-2">
-                            <label className="form-label mb-1 small text-muted">Select Model</label>
-                            <select 
-                                className="form-select form-select-sm mb-2"
-                                value={selectedModel ? makeModelId(selectedModel) : ''}
-                                onChange={(e) => {
-                                    const newModel = models.find(m => makeModelId(m) === e.target.value)
-                                    setSelectedModel(newModel)
-                                }}
-                            >
-                                {models.length === 0 && <option value="">No models configured</option>}
-                                {models.map((model, index) => (
-                                    <option key={index} value={makeModelId(model)}>{model.name}</option>
-                                ))}
-                            </select>
-                            <button 
-                                className="btn btn-sm btn-primary w-100"
-                                onClick={() => {
-                                    setShowSettings(true);
-                                }}
-                            >
-                                <i className="fas fa-sliders-h me-2"></i>
-                                Configure Models
-                            </button>
+            <div className="d-flex justify-content-between align-items-center border-bottom py-2 px-3">
+                <button 
+                    className="btn btn-link btn-outline-danger btn-sm"
+                    onClick={clearConversation}
+                    title="Clear conversation"
+                >
+                    <i className="fas fa-trash-alt me-2"></i>
+                    {/*Clear*/}
+                </button>
+                
+                <div className="d-flex align-items-center gap-3">
+                    {selectedModel && (
+                        <span className="text-muted small d-flex align-items-center">
+                            {/*<i className="fas fa-robot me-1"></i>*/}
+                            {selectedModel.name}
+                        </span>
+                    )}
+                    <div className="dropdown">
+                        <button 
+                            className="btn btn-link btn-sm p-1"
+                            type="button" 
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            title="Settings"
+                        >
+                            <i className="fas fa-cog fa-lg text-secondary"></i>
+                        </button>
+                        <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
+                            <div className="px-3 py-2">
+                                <label className="form-label mb-1 small text-muted">Select Model</label>
+                                <select 
+                                    className="form-select form-select-sm mb-2"
+                                    value={selectedModel ? makeModelId(selectedModel) : ''}
+                                    onChange={(e) => {
+                                        const newModel = models.find(m => makeModelId(m) === e.target.value);
+                                        setSelectedModel(newModel);
+                                    }}
+                                >
+                                    {models.length === 0 && <option value="">No models configured</option>}
+                                    {models.map((model, index) => (
+                                        <option key={index} value={makeModelId(model)}>{model.name}</option>
+                                    ))}
+                                </select>
+                                <button 
+                                    className="btn btn-sm btn-primary w-100"
+                                    onClick={() => setShowSettings(true)}
+                                >
+                                    <i className="fas fa-sliders-h me-2"></i>
+                                    Configure Models
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -443,6 +466,7 @@ function Chat({modelStorage}) {
                         getIconForType={getIconForType}
                     />
                 ))}
+                <div ref={messagesEndRef} />
             </div>
 
             <PendingAttachments
@@ -454,6 +478,7 @@ function Chat({modelStorage}) {
                 onCopy={copyToClipboard}
                 getIconForType={getIconForType}
             />
+            
             <form onSubmit={handleSubmit} className="border-top p-3">
                 <div className="input-group">
                     <input
@@ -475,7 +500,6 @@ function Chat({modelStorage}) {
                     </button>
                 </div>
             </form>
-            <div ref={messagesEndRef}/>
             {showSettings && (
                 <Settings
                     models={models}
