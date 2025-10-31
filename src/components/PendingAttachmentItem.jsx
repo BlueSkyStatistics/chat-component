@@ -30,9 +30,9 @@ function PendingAttachmentItem({
                         </small>
                     )}
                 </div>
-                <div className="d-flex gap-1 flex-shrink-0 ms-2">
+                <div className="d-flex gap-1 flex-shrink-0">
                     <button
-                        className="btn btn-sm btn-outline-secondary px-1 py-0"
+                        className="btn btn-sm px-1 py-0"
                         onClick={() => onToggleExpand(attachment.id)}
                         title={isExpanded ? 'Hide content' : 'View content'}
                     >

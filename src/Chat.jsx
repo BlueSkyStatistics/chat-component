@@ -25,6 +25,7 @@ function Chat({modelStorage}) {
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
     const [expandedAttachments, setExpandedAttachments] = useState(new Set())
+    const [showAttachmentBar, setShowAttachmentBar] = useState(true)
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
@@ -398,12 +399,11 @@ function Chat({modelStorage}) {
         <>
             <div className="d-flex justify-content-between align-items-center border-bottom py-2 px-3">
                 <button 
-                    className="btn btn-link btn-outline-danger btn-sm"
+                    className="btn btn-outline-danger btn-sm"
                     onClick={clearConversation}
                     title="Clear conversation"
                 >
-                    <i className="fas fa-trash-alt me-2"></i>
-                    {/*Clear*/}
+                    <i className="fas fa-eraser"></i>
                 </button>
                 
                 <div className="d-flex align-items-center gap-3">
@@ -469,25 +469,47 @@ function Chat({modelStorage}) {
                 <div ref={messagesEndRef} />
             </div>
 
-            <PendingAttachments
-                attachments={pendingAttachments}
-                expandedAttachments={expandedAttachments}
-                onToggleExpand={toggleAttachmentExpanded}
-                onRemoveAttachment={removeAttachment}
-                onRemoveGroup={removeOutputGroup}
-                onCopy={copyToClipboard}
-                getIconForType={getIconForType}
-            />
+{showAttachmentBar && (
+                <PendingAttachments
+                    attachments={pendingAttachments}
+                    expandedAttachments={expandedAttachments}
+                    onToggleExpand={toggleAttachmentExpanded}
+                    onRemoveAttachment={removeAttachment}
+                    onRemoveGroup={removeOutputGroup}
+                    onCopy={copyToClipboard}
+                    getIconForType={getIconForType}
+                />
+            )}
             
-            <form onSubmit={handleSubmit} className="border-top p-3">
+<form onSubmit={handleSubmit} className="border-top p-3">
                 <div className="input-group">
-                    <input
+                    {pendingAttachments.length > 0 && (
+                        <button
+                            type="button"
+                            className="btn btn-outline-secondary position-relative"
+                            onClick={() => setShowAttachmentBar(!showAttachmentBar)}
+                            title={showAttachmentBar ? "Hide attachments" : "Show attachments"}
+                        >
+                            <i className="fas fa-paperclip"></i>
+                            <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary">
+                                {pendingAttachments.length}
+                            </span>
+                        </button>
+                    )}
+                    <textarea
                         ref={inputRef}
-                        type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Type a message..."
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
+                        placeholder="Type a message... (Shift+Enter for new line)"
                         className="form-control"
+                        rows="1"
+                        style={{resize: 'vertical', minHeight: '38px'}}
                     />
                     <button
                         type="submit"

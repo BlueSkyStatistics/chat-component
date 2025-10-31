@@ -254,13 +254,14 @@
     display: flex;
     gap: 10px;
     flex-wrap: nowrap;
-    min-width: min-content;
+    /*min-width: min-content;*/
 }
 
 .accordion-horizontal .accordion-item {
     flex: 0 0 auto;
     min-width: 180px;
-    max-width: 250px;
+    /*max-width: 250px;*/
+    max-width: 100%;
 }
 
 #attachmentAccordion .accordion-button {
