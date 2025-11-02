@@ -54,7 +54,7 @@ function PendingAttachments({
 
     return (
         <div className="pending-attachments-wrapper p-2 border-top bg-light" style={{overflowX: 'auto', overflowY: 'hidden'}}>
-            <div className="accordion-horizontal accordion accordion-flush" id="attachmentAccordion">
+            <div className="accordion accordion-flush" id="attachmentAccordion">
                 {Object.entries(groupedAttachments).map(([outputId, group]) => (
                     <div className="accordion-item" key={outputId}>
                         <h2 className="accordion-header">

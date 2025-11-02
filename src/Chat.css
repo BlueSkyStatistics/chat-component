@@ -28,10 +28,24 @@
 .message-actions {
     position: absolute;
     right: 10px;
+    top: 0;
     opacity: 0;
     transition: opacity 0.2s ease;
+    border-radius: 5px;
+    margin-top: 5px;
 }
 
+.message.assistant .message-actions {
+    background-color: gray;
+}
+
+.message.user .message-actions {
+    background-color: white;
+}
+
+.message-content {
+    margin: .5em 0;
+}
 
 .raw-content {
     margin: 0;
@@ -219,22 +233,22 @@
 }
 
 /* Custom scrollbar for pending attachments */
-.pending-attachments-wrapper::-webkit-scrollbar {
-    height: 8px;
-}
+/*.pending-attachments-wrapper::-webkit-scrollbar {*/
+/*    height: 8px;*/
+/*}*/
 
-.pending-attachments-wrapper::-webkit-scrollbar-track {
-    background: #e9ecef;
-}
+/*.pending-attachments-wrapper::-webkit-scrollbar-track {*/
+/*    background: #e9ecef;*/
+/*}*/
 
-.pending-attachments-wrapper::-webkit-scrollbar-thumb {
-    background: #adb5bd;
-    border-radius: 4px;
-}
+/*.pending-attachments-wrapper::-webkit-scrollbar-thumb {*/
+/*    background: #adb5bd;*/
+/*    border-radius: 4px;*/
+/*}*/
 
-.pending-attachments-wrapper::-webkit-scrollbar-thumb:hover {
-    background: #6c757d;
-}
+/*.pending-attachments-wrapper::-webkit-scrollbar-thumb:hover {*/
+/*    background: #6c757d;*/
+/*}*/
 
 
 /* Pending attachment card styling */

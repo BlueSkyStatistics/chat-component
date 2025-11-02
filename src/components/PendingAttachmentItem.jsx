@@ -10,6 +10,12 @@ function PendingAttachmentItem({
 }) {
     const itemTitle = attachment.metadata?.title || attachment.type
     const itemHref = attachment.metadata?.href
+    const handleHrefClick = (e) => {
+        // Prevent the default link behavior if needed
+        e.preventDefault()
+        // Custom logic can be added here if necessary
+        window.scrollOutputItemIntoView && window.scrollOutputItemIntoView(itemHref.slice(1))
+    }
 
     return (
         <div className="pending-attachment-card">
@@ -21,6 +27,7 @@ function PendingAttachmentItem({
                             href={itemHref} 
                             className="text-decoration-none text-primary text-truncate"
                             title={itemTitle}
+                            onClick={handleHrefClick}
                         >
                             <small>{itemTitle}</small>
                         </a>

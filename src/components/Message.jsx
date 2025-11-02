@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import MessageAttachments from './MessageAttachments'
+import {useMemo} from "react";
 
 function Message({ 
     message, 
@@ -14,12 +15,15 @@ function Message({
     onToggleAttachmentExpand,
     getIconForType 
 }) {
+    const actionButtonClass = useMemo(() => {
+        return message.role === 'user' ? 'm-0 btn' : 'm-0 btn btn-light'
+    }, [message.role])
     return (
         <div className={`message ${message.role}`}>
             <div className="message-actions">
-                <div className="btn-group btn-group-sm shadow-sm" role="group">
+                <div className="btn-group btn-group-sm shadow-sm my-0" role="group">
                     <button
-                        className="btn btn-light"
+                        className={actionButtonClass}
                         onClick={() => onCopy(message.content)}
                         title="Copy to clipboard"
                     >
@@ -29,7 +33,7 @@ function Message({
                         </svg>
                     </button>
                     <button
-                        className="btn btn-light"
+                        className={actionButtonClass}
                         onClick={() => onToggleView(message.id)}
                         title={message.showRaw ? "Show formatted" : "Show raw"}
                     >
@@ -39,7 +43,7 @@ function Message({
                         </svg>
                     </button>
                     <button
-                        className="btn btn-light text-danger"
+                        className={"text-danger " + actionButtonClass}
                         onClick={() => onDelete(message.id)}
                         title="Delete message"
                     >

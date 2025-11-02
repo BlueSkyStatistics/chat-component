@@ -25,7 +25,7 @@ function Chat({modelStorage}) {
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
     const [expandedAttachments, setExpandedAttachments] = useState(new Set())
-    const [showAttachmentBar, setShowAttachmentBar] = useState(true)
+    const [showAttachmentBar, setShowAttachmentBar] = useState(false)
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
@@ -397,31 +397,30 @@ function Chat({modelStorage}) {
 
     return (
         <>
-            <div className="d-flex justify-content-between align-items-center border-bottom py-2 px-3">
+            <div className="d-flex justify-content-between align-items-center border-bottom py-1 px-3">
                 <button 
-                    className="btn btn-outline-danger btn-sm"
+                    className="btn btn-sm text-danger m-0"
                     onClick={clearConversation}
                     title="Clear conversation"
                 >
                     <i className="fas fa-eraser"></i>
                 </button>
                 
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-2">
                     {selectedModel && (
-                        <span className="text-muted small d-flex align-items-center">
-                            {/*<i className="fas fa-robot me-1"></i>*/}
+                        <span className="text-white">
                             {selectedModel.name}
                         </span>
                     )}
                     <div className="dropdown">
                         <button 
-                            className="btn btn-link btn-sm p-1"
+                            className="btn btn-link btn-sm p-1 m-0"
                             type="button" 
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
                             title="Settings"
                         >
-                            <i className="fas fa-cog fa-lg text-secondary"></i>
+                            <i className="fas fa-cog text-white"></i>
                         </button>
                         <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
                             <div className="px-3 py-2">
@@ -481,12 +480,12 @@ function Chat({modelStorage}) {
                 />
             )}
             
-<form onSubmit={handleSubmit} className="border-top p-3">
+<form onSubmit={handleSubmit} className="border-top p-2 m-0 pt-3">
                 <div className="input-group">
                     {pendingAttachments.length > 0 && (
                         <button
                             type="button"
-                            className="btn btn-outline-secondary position-relative"
+                            className="btn btn-secondary position-relative m-0 mr-2"
                             onClick={() => setShowAttachmentBar(!showAttachmentBar)}
                             title={showAttachmentBar ? "Hide attachments" : "Show attachments"}
                         >
@@ -497,6 +496,7 @@ function Chat({modelStorage}) {
                         </button>
                     )}
                     <textarea
+                        id='chatUserInput'
                         ref={inputRef}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -507,13 +507,13 @@ function Chat({modelStorage}) {
                             }
                         }}
                         placeholder="Type a message... (Shift+Enter for new line)"
-                        className="form-control"
+                        className="form-control px-1"
                         rows="1"
                         style={{resize: 'vertical', minHeight: '38px'}}
                     />
                     <button
                         type="submit"
-                        className={`btn ${isStreaming ? 'btn-danger' : 'btn-primary'}`}
+                        className={`m-0 btn ${isStreaming ? 'btn-danger' : 'btn-primary'}`}
                         onClick={isStreaming ? stopStreaming : undefined}
                         title={isStreaming ? "Stop streaming" : "Send message"}
                     >
