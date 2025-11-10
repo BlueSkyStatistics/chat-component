@@ -55,7 +55,7 @@ function PendingAttachmentItem({
                 </div>
             </div>
             {isExpanded && (
-                <div className="p-2 bg-white border-top" style={{maxHeight: '400px', overflowY: 'auto', animation: 'slideDown 0.2s ease'}}>
+                <div className="p-2 bg-white border-top chat-attachment-container">
                     <AttachmentContent attachment={attachment} onCopy={onCopy} />
                 </div>
             )}

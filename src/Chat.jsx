@@ -456,12 +456,10 @@ function Chat({modelStorage}) {
                     <Message
                         key={message.id}
                         message={message}
-                        expandedAttachments={expandedAttachments}
                         onCopy={copyToClipboard}
                         onDelete={deleteMessage}
                         onToggleView={toggleMessageView}
                         onToggleAttachments={toggleMessageAttachments}
-                        onToggleAttachmentExpand={toggleAttachmentExpanded}
                         getIconForType={getIconForType}
                     />
                 ))}

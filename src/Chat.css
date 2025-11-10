@@ -309,3 +309,12 @@
 .accordion-item:hover .group-delete-btn {
     opacity: 1;
 }
+
+.chat-attachment-container {
+    animation: 'slideDown 0.2s ease';
+}
+
+.pending-attachments-wrapper {
+    overflow-y: scroll;
+    display: contents;
+}

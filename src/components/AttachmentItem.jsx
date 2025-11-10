@@ -1,12 +1,12 @@
 import AttachmentContent from './AttachmentContent'
+import {useState} from "react";
 
 function AttachmentItem({ 
     attachment, 
-    isExpanded, 
-    onToggleExpand, 
     onCopy,
     getIconForType 
 }) {
+    const [isExpanded, setIsExpanded] = useState(false)
     const itemTitle = attachment.metadata?.title || attachment.type
     const itemHref = attachment.metadata?.href
 
@@ -15,6 +15,9 @@ function AttachmentItem({
         e.preventDefault()
         // Custom logic can be added here if necessary
         window.scrollOutputItemIntoView && window.scrollOutputItemIntoView(itemHref.slice(1))
+    }
+    const onToggleExpand = () => {
+        setIsExpanded(prev => !prev)
     }
 
     return (
@@ -40,7 +43,7 @@ function AttachmentItem({
                 </div>
                 <button
                     className="btn btn-sm btn-secondary flex-shrink-0 m-0"
-                    onClick={() => onToggleExpand(attachment.id)}
+                    onClick={onToggleExpand}
                     title={isExpanded ? 'Hide content' : 'View content'}
                 >
                     <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'}`}></i>

@@ -7,13 +7,11 @@ import {useMemo} from "react";
 
 function Message({ 
     message, 
-    expandedAttachments,
-    onCopy, 
+    onCopy,
     onDelete, 
     onToggleView,
     onToggleAttachments,
-    onToggleAttachmentExpand,
-    getIconForType 
+    getIconForType
 }) {
     const actionButtonClass = useMemo(() => {
         return message.role === 'user' ? 'm-0 btn' : 'm-0 btn btn-light'
@@ -58,9 +56,7 @@ function Message({
             <MessageAttachments
                 attachments={message.attachments}
                 showAttachments={message.showAttachments}
-                expandedAttachments={expandedAttachments}
                 onToggleShow={() => onToggleAttachments(message.id)}
-                onToggleExpand={onToggleAttachmentExpand}
                 onCopy={onCopy}
                 getIconForType={getIconForType}
             />

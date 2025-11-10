@@ -3,9 +3,7 @@ import AttachmentItem from './AttachmentItem'
 function MessageAttachments({ 
     attachments, 
     showAttachments,
-    expandedAttachments,
     onToggleShow,
-    onToggleExpand,
     onCopy,
     getIconForType 
 }) {
@@ -32,8 +30,6 @@ function MessageAttachments({
                         <AttachmentItem
                             key={attachment.id}
                             attachment={attachment}
-                            isExpanded={expandedAttachments.has(attachment.id)}
-                            onToggleExpand={onToggleExpand}
                             onCopy={onCopy}
                             getIconForType={getIconForType}
                         />

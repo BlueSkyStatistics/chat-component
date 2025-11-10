@@ -53,7 +53,7 @@ function PendingAttachments({
     const groupedAttachments = groupAttachmentsByOutput(attachments)
 
     return (
-        <div className="pending-attachments-wrapper p-2 border-top bg-light" style={{overflowX: 'auto', overflowY: 'hidden'}}>
+        <div className="pending-attachments-wrapper p-2 border-top bg-light">
             <div className="accordion accordion-flush" id="attachmentAccordion">
                 {Object.entries(groupedAttachments).map(([outputId, group]) => (
                     <div className="accordion-item" key={outputId}>
