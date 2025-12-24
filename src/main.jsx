@@ -28,10 +28,10 @@ if (import.meta.env.DEV) {
   initChatComponent('chat-container', new LocalStorageProvider())
 }
 
-// Production mode
-if (typeof window !== 'undefined') {
-  window.initChatComponent = initChatComponent
-  window.ModelStorageInterface = ModelStorageInterface
-}
+// // Production mode
+// if (typeof window !== 'undefined') {
+//   window.initChatComponent = initChatComponent
+//   window.ModelStorageInterface = ModelStorageInterface
+// }
 
-export { initChatComponent }
+export { initChatComponent, ModelStorageInterface }
