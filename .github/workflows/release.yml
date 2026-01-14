@@ -46,7 +46,7 @@ jobs:
         run: |
           # Create release directory with dist files only
           mkdir -p release
-          cp dist/chat-component.css dist/chat-component.umd.cjs dist/chat-component.js release/
+          cp dist/chat.css dist/chat-component.umd.cjs dist/chat-component.js release/
           cp -r dist/attachmentTemplates release/
           cd release
           zip -r ../chat-component.zip ./*

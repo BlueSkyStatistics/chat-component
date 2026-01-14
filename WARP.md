@@ -29,7 +29,7 @@ npm run preview
 ### Build Output
 - The build produces UMD format files in `dist/`:
   - `chat-component.umd.cjs` - Main JavaScript bundle
-  - `chat-component.css` - Styles
+  - `chat.css` - Styles
 
 ### Release Process
 - The project uses GitHub Actions for automated releases

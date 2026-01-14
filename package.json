@@ -10,7 +10,7 @@
       "import": "./dist/chat-component.js",
       "require": "./dist/chat-component.umd.cjs"
     },
-    "./style.css": "./dist/chat-component.css",
+    "./Chat.css": "./dist/chat.css",
     "./attachmentTemplates/*": "./dist/attachmentTemplates/*"
   },
   "files": [
