@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 
 const initialModelSettings = {
   name: '', 
@@ -54,15 +54,22 @@ function Settings({ models, onSave, onClose }) {
                         <div className="card-body p-3">
                           <div className="d-flex justify-content-between align-items-start">
                             <div className="flex-grow-1">
-                              <div className="fw-semibold">{model.name}</div>
+                              <div className="fw-semibold">
+                                {model.name}
+                                {model.external && (
+                                  <i className="fas fa-globe ms-2 text-muted" title="External Model"></i>
+                                )}
+                              </div>
                               <div className="text-muted small">{model.endpoint}</div>
                             </div>
-                            <button 
-                              onClick={() => handleRemoveModel(index)}
-                              className="btn btn-danger btn-sm ms-3"
-                            >
-                              <i className="fas fa-trash-alt"></i>
-                            </button>
+                            {!model.external && (
+                              <button 
+                                onClick={() => handleRemoveModel(index)}
+                                className="btn btn-danger btn-sm ms-3"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

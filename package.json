@@ -1,13 +1,28 @@
 {
-  "name": "chat-component",
-  "private": true,
+  "name": "@bluesky/chat",
+  "private": false,
   "version": "0.0.14",
   "type": "module",
+  "main": "./dist/chat-component.umd.cjs",
+  "module": "./dist/chat-component.js",
+  "exports": {
+    ".": {
+      "import": "./dist/chat-component.js",
+      "require": "./dist/chat-component.umd.cjs"
+    },
+    "./style.css": "./dist/chat-component.css",
+    "./attachmentTemplates/*": "./dist/attachmentTemplates/*"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "watch": "vite build --watch",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "npm run build",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -23,6 +38,7 @@
     "@vitejs/plugin-react": "^5.0.2",
     "bootstrap": "^5.3.8",
     "electron": "^39.2.6",
-    "vite": "7.1.11"
+    "vite": "7.1.11",
+    "vite-plugin-static-copy": "^3.1.4"
   }
 }

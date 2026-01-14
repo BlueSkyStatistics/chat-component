@@ -44,12 +44,17 @@ jobs:
 
       - name: Create archives
         run: |
+          # Create release directory with dist files only
           mkdir -p release
-          cp dist/chat-component.css dist/chat-component.umd.cjs release/
+          cp dist/chat-component.css dist/chat-component.umd.cjs dist/chat-component.js release/
+          cp -r dist/attachmentTemplates release/
           cd release
           zip -r ../chat-component.zip ./*
           asar pack . ../chat-component.asar
           cd ..
+          
+          # Create npm-compatible tarball
+          npm pack
 
       - name: Increment version
         if: ${{ github.event.inputs.increment_version == true || github.event_name != 'workflow_dispatch' }}
@@ -86,6 +91,7 @@ jobs:
           files: |
             chat-component.zip
             chat-component.asar
+            bluesky-chat-*.tgz
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
