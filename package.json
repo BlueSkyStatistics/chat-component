@@ -20,9 +20,7 @@
     "dev": "vite",
     "build": "vite build",
     "watch": "vite build --watch",
-    "preview": "vite preview",
-    "postinstall": "npm run build",
-    "prepare": "npm run build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "18.3.1",
