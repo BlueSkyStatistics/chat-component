@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef} from 'react'
+import {useState, useEffect, useRef, useCallback} from 'react'
 import {formatMessage} from './attachmentFormatters'
 import './Chat.css'
 import Settings from './Settings'
@@ -45,6 +45,25 @@ function Chat({modelStorage}) {
 
     const storageProviderRef = useRef(modelStorage);
 
+    const refreshModels = useCallback(async () => {
+        const savedModels = await storageProviderRef.current.getModels();
+        const savedModelId = await storageProviderRef.current.getSelectedModel();
+
+        setModels(savedModels || []);
+        if (savedModels && savedModels.length > 0) {
+            let next = savedModels[0];
+            if (savedModelId) {
+                const found = savedModels.find(m => makeModelId(m) === savedModelId);
+                if (found) next = found;
+            }
+            setSelectedModel(next);
+            await storageProviderRef.current.saveSelectedModel(makeModelId(next));
+        } else {
+            setSelectedModel(null);
+            await storageProviderRef.current.saveSelectedModel(null);
+        }
+    }, []);
+
     // Save selected model when it changes
     useEffect(() => {
         if (selectedModel) {
@@ -55,33 +74,8 @@ function Chat({modelStorage}) {
 
     // Load saved models and restore selected model
     useEffect(() => {
-        async function loadModels() {
-            const savedModels = await storageProviderRef.current.getModels();
-            const savedModelId = await storageProviderRef.current.getSelectedModel();
-
-            if (savedModels && savedModels.length > 0) {
-                setModels(savedModels);
-
-                // Try to restore the previously selected model
-                if (savedModelId) {
-                    const savedModel = savedModels.find(m => `${m.name}-${m.endpoint}` === savedModelId);
-                    if (savedModel) {
-                        setSelectedModel(savedModel);
-                    } else {
-                        // If saved model not found, use the first available model
-                        setSelectedModel(savedModels[0]);
-                        await storageProviderRef.current.saveSelectedModel(makeModelId(savedModels[0]));
-                    }
-                } else {
-                    // If no model was previously selected, use the first one
-                    setSelectedModel(savedModels[0]);
-                    await storageProviderRef.current.saveSelectedModel(makeModelId(savedModels[0]));
-                }
-            }
-        }
-
-        loadModels();
-    }, [])
+        refreshModels();
+    }, [refreshModels])
 
     // Listen for output elements from Electron
     useEffect(() => {
@@ -365,6 +359,12 @@ function Chat({modelStorage}) {
         }
     }
 
+    const handleRefreshModels = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await refreshModels();
+    }
+
     const handleSaveSettings = async (newModels) => {
         setModels(newModels);
         await storageProviderRef.current.saveModels(newModels);
@@ -425,19 +425,28 @@ function Chat({modelStorage}) {
                         <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
                             <div className="px-3 py-2">
                                 <label className="form-label mb-1 small text-muted">Select Model</label>
-                                <select 
-                                    className="form-select form-select-sm mb-2"
-                                    value={selectedModel ? makeModelId(selectedModel) : ''}
-                                    onChange={(e) => {
-                                        const newModel = models.find(m => makeModelId(m) === e.target.value);
-                                        setSelectedModel(newModel);
-                                    }}
-                                >
-                                    {models.length === 0 && <option value="">No models configured</option>}
-                                    {models.map((model, index) => (
-                                        <option key={index} value={makeModelId(model)}>{model.name}</option>
-                                    ))}
-                                </select>
+                                <div className="d-flex gap-2 mb-2">
+                                    <select 
+                                        className="form-select form-select-sm flex-grow-1"
+                                        value={selectedModel ? makeModelId(selectedModel) : ''}
+                                        onChange={(e) => {
+                                            const newModel = models.find(m => makeModelId(m) === e.target.value);
+                                            setSelectedModel(newModel);
+                                        }}
+                                    >
+                                        {models.length === 0 && <option value="">No models configured</option>}
+                                        {models.map((model, index) => (
+                                            <option key={index} value={makeModelId(model)}>{model.name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="btn btn-sm btn-primary"
+                                        onClick={handleRefreshModels}
+                                        title="Refresh models list"
+                                    >
+                                        <i className="fas fa-sync"></i>
+                                    </button>
+                                </div>
                                 <button 
                                     className="btn btn-sm btn-primary w-100"
                                     onClick={() => setShowSettings(true)}
