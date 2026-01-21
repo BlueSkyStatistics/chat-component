@@ -303,7 +303,15 @@ function Chat({modelStorage}) {
             })
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`)
+                let errorData;
+                try {
+                    errorData = await response.json()
+                    errorData = errorData.error
+                } catch (e) {
+                    throw new Error(`HTTP error! status: ${response.status}`)
+                }
+                throw new Error(`HTTP error! type: ${errorData.type}\nmessage: ${errorData.message}`)
+
             }
 
             const reader = response.body.getReader()
