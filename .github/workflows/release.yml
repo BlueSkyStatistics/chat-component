@@ -42,20 +42,6 @@ jobs:
       - name: Install asar
         run: npm install -g asar
 
-      - name: Create archives
-        run: |
-          # Create release directory with dist files only
-          mkdir -p release
-          cp dist/chat.css dist/chat-component.umd.cjs dist/chat-component.js release/
-          cp -r dist/attachmentTemplates release/
-          cd release
-          zip -r ../chat-component.zip ./*
-          asar pack . ../chat-component.asar
-          cd ..
-          
-          # Create npm-compatible tarball
-          npm pack
-
       - name: Increment version
         if: ${{ github.event.inputs.increment_version == true || github.event_name != 'workflow_dispatch' }}
         run: |
@@ -76,6 +62,21 @@ jobs:
           git add package.json
           git commit -m "chore: bump version to ${new_version}"
           git push
+
+      - name: Create archives
+        run: |
+          # Create release directory with dist files only
+          mkdir -p release
+          cp dist/chat.css dist/chat-component.umd.cjs dist/chat-component.js release/
+          cp -r dist/attachmentTemplates release/
+          cd release
+          zip -r ../chat-component.zip ./*
+          asar pack . ../chat-component.asar
+          cd ..
+          
+          # Create npm-compatible tarball
+          npm pack
+          cp bluesky-chat-*.tgz bluesky-chat-latest.tgz
 
       - name: Get current version
         id: version
