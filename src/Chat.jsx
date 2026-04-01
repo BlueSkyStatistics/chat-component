@@ -468,7 +468,7 @@ function Chat({modelStorage}) {
                 </div>
             </div>
 
-            <div className="flex-grow-1 p-3 overflow-auto" style={{scrollBehavior: 'smooth', overscrollBehavior: 'contain'}} ref={chatMessagesRef}>
+            <div className="flex-grow-1 py-2 overflow-auto" style={{scrollBehavior: 'smooth', overscrollBehavior: 'contain'}} ref={chatMessagesRef}>
                 {messages.map((message) => (
                     <Message
                         key={message.id}
