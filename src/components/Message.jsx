@@ -1,8 +1,11 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import MessageAttachments from './MessageAttachments'
+import {normalizeLatexDelimiters} from '../utils/normalizeLatex'
 import {useMemo} from "react";
 
 function Message({ 
@@ -16,6 +19,10 @@ function Message({
     const actionButtonClass = useMemo(() => {
         return message.role === 'user' ? 'm-0 btn' : 'm-0 btn btn-light'
     }, [message.role])
+    const renderedContent = useMemo(
+        () => normalizeLatexDelimiters(message.content),
+        [message.content]
+    )
     return (
         <div className={`message ${message.role}`}>
             <div className="message-actions">
@@ -66,7 +73,8 @@ function Message({
                     <pre className="raw-content">{message.content}</pre>
                 ) : (
                     <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
                         components={{
                             code({node, inline, className, children, ...props}) {
                                 const match = /language-(\w+)/.exec(className || '')
@@ -105,7 +113,7 @@ function Message({
                             }
                         }}
                     >
-                        {message.content}
+                        {renderedContent}
                     </ReactMarkdown>
                 )}
             </div>

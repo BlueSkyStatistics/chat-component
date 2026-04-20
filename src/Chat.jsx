@@ -1,5 +1,6 @@
 import {useState, useEffect, useRef, useCallback} from 'react'
 import {formatMessage} from './attachmentFormatters'
+import 'katex/dist/katex.min.css'
 import './Chat.css'
 import Settings from './Settings'
 import Message from './components/Message'
