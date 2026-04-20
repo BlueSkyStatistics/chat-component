@@ -1,12 +1,26 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
+import renderMathInElement from 'katex/contrib/auto-render'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import MessageAttachments from './MessageAttachments'
-import {normalizeLatexDelimiters} from '../utils/normalizeLatex'
-import {useMemo} from "react";
+import {preserveLatexEscapes} from '../utils/preserveLatexEscapes'
+import {useEffect, useMemo, useRef} from "react";
+
+// Delimiter pairs recognized by KaTeX auto-render. Order matters: longer /
+// more specific delimiters (e.g. `$$`) must come before shorter ones (`$`).
+const KATEX_DELIMITERS = [
+    {left: '$$', right: '$$', display: true},
+    {left: '\\[', right: '\\]', display: true},
+    {left: '\\(', right: '\\)', display: false},
+    {left: '$', right: '$', display: false},
+]
+
+// Coalesce auto-render passes that happen during streaming. Each streamed
+// token re-renders the markdown, which would otherwise trigger one KaTeX
+// pass per token. Waiting a short moment lets bursts of tokens settle into
+// a single pass while still feeling immediate once streaming pauses/stops.
+const KATEX_DEBOUNCE_MS = 120
 
 function Message({ 
     message, 
@@ -19,10 +33,39 @@ function Message({
     const actionButtonClass = useMemo(() => {
         return message.role === 'user' ? 'm-0 btn' : 'm-0 btn btn-light'
     }, [message.role])
-    const renderedContent = useMemo(
-        () => normalizeLatexDelimiters(message.content),
+
+    // CommonMark would strip the backslashes from `\(`, `\[` before the math
+    // ever reaches the rendered DOM, so we rewrite those TeX delimiters into
+    // `$` / `$$` up-front. Everything else (including actual `$` delimiters
+    // and `\begin{env}...\end{env}` blocks that appear inside `$$...$$`) is
+    // recognized natively by KaTeX auto-render below.
+    const markdownSource = useMemo(
+        () => preserveLatexEscapes(message.content),
         [message.content]
     )
+
+    // KaTeX auto-render pass. Runs after each re-render of the markdown output
+    // so that streamed content is re-scanned as new tokens arrive. The
+    // `auto-render` walks text nodes and replaces math delimiters in place,
+    // so code blocks / inline `<code>` are left untouched automatically.
+    //
+    // The pass is debounced: during streaming the markdown DOM is rebuilt on
+    // every token, so running KaTeX synchronously on every commit wastes work
+    // on output that's about to be replaced. The effect's cleanup cancels any
+    // pending pass, so the last-committed content is always the one rendered.
+    const contentRef = useRef(null)
+    useEffect(() => {
+        if (!contentRef.current || message.showRaw) return
+        const handle = setTimeout(() => {
+            if (!contentRef.current) return
+            renderMathInElement(contentRef.current, {
+                delimiters: KATEX_DELIMITERS,
+                throwOnError: false,
+                ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            })
+        }, KATEX_DEBOUNCE_MS)
+        return () => clearTimeout(handle)
+    }, [markdownSource, message.showRaw])
     return (
         <div className={`message ${message.role}`}>
             <div className="message-actions">
@@ -68,13 +111,12 @@ function Message({
                 getIconForType={getIconForType}
             />
 
-            <div className="message-content">
+            <div className="message-content" ref={contentRef}>
                 {message.showRaw ? (
                     <pre className="raw-content">{message.content}</pre>
                 ) : (
                     <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
+                        remarkPlugins={[remarkGfm]}
                         components={{
                             code({node, inline, className, children, ...props}) {
                                 const match = /language-(\w+)/.exec(className || '')
@@ -113,7 +155,7 @@ function Message({
                             }
                         }}
                     >
-                        {renderedContent}
+                        {markdownSource}
                     </ReactMarkdown>
                 )}
             </div>
