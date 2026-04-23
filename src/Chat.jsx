@@ -183,6 +183,9 @@ function Chat({modelStorage, conversationStorage}) {
     }, [])
 
     // Load messages from a stored conversation into the UI.
+    // Note: this does not clobber the hydration flag; the autosave effect's
+    // hasUserActivity check keeps things sane, and if a save does fire on
+    // load it simply touches updatedAt on the just-opened conversation.
     const loadConversation = useCallback(async (id) => {
         if (!id) return
         abortActiveStream()
@@ -192,8 +195,6 @@ function Chat({modelStorage, conversationStorage}) {
             await conversationStorageRef.current.setActiveConversationId(null)
             return
         }
-        // Skip autosave on this render; we're hydrating, not mutating.
-        conversationHydratedRef.current = false
         setMessages(Array.isArray(full.messages) ? full.messages : [])
         setPendingAttachments([])
         setActiveConversationId(full.id)
@@ -206,9 +207,10 @@ function Chat({modelStorage, conversationStorage}) {
 
     // Reset the UI to a brand-new, unsaved conversation (greeting only).
     // The previously-active conversation remains in storage untouched.
+    // Autosave is naturally skipped here because `[greeting]` has no user
+    // activity, so we intentionally do NOT touch conversationHydratedRef.
     const startNewConversation = useCallback(async () => {
         abortActiveStream()
-        conversationHydratedRef.current = false
         setMessages([makeGreetingMessage()])
         setPendingAttachments([])
         setActiveConversationId(null)
