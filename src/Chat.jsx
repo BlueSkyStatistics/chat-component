@@ -6,7 +6,6 @@ import Settings from './Settings'
 import Conversations from './Conversations'
 import Message from './components/Message'
 import PendingAttachments from './components/PendingAttachments'
-import {LocalStorageConversationProvider} from './storage/conversationStorage'
 import {deriveConversationTitle, makeConversationId} from './utils/conversationIO'
 
 const makeModelId = (model) => `${model.name}-${model.endpoint}`;
@@ -65,9 +64,11 @@ function Chat({modelStorage, conversationStorage}) {
     };
 
     const storageProviderRef = useRef(modelStorage);
-    const conversationStorageRef = useRef(
-        conversationStorage || new LocalStorageConversationProvider()
-    );
+    // When no conversationStorage is provided the whole conversation manager
+    // (listing, restore, rename, delete, export/import, autosave) is disabled
+    // and the eraser button falls back to "just clear messages".
+    const conversationStorageRef = useRef(conversationStorage || null);
+    const hasConversationStorage = !!conversationStorage;
 
     const refreshModels = useCallback(async () => {
         const savedModels = await storageProviderRef.current.getModels();
@@ -188,11 +189,13 @@ function Chat({modelStorage, conversationStorage}) {
     // load it simply touches updatedAt on the just-opened conversation.
     const loadConversation = useCallback(async (id) => {
         if (!id) return
+        const storage = conversationStorageRef.current
+        if (!storage) return
         abortActiveStream()
-        const full = await conversationStorageRef.current.getConversation(id)
+        const full = await storage.getConversation(id)
         if (!full) {
             // Stale pointer in storage; forget it so we start fresh next time.
-            await conversationStorageRef.current.setActiveConversationId(null)
+            await storage.setActiveConversationId(null)
             return
         }
         setMessages(Array.isArray(full.messages) ? full.messages : [])
@@ -202,11 +205,12 @@ function Chat({modelStorage, conversationStorage}) {
             title: full.title || DEFAULT_TITLE,
             createdAt: full.createdAt || null,
         })
-        await conversationStorageRef.current.setActiveConversationId(full.id)
+        await storage.setActiveConversationId(full.id)
     }, [abortActiveStream])
 
     // Reset the UI to a brand-new, unsaved conversation (greeting only).
-    // The previously-active conversation remains in storage untouched.
+    // When a storage provider is configured the previously-active conversation
+    // remains in storage untouched; otherwise this is just a local "clear".
     // Autosave is naturally skipped here because `[greeting]` has no user
     // activity, so we intentionally do NOT touch conversationHydratedRef.
     const startNewConversation = useCallback(async () => {
@@ -215,21 +219,30 @@ function Chat({modelStorage, conversationStorage}) {
         setPendingAttachments([])
         setActiveConversationId(null)
         setConversationMeta({title: DEFAULT_TITLE, createdAt: null})
-        await conversationStorageRef.current.setActiveConversationId(null)
+        const storage = conversationStorageRef.current
+        if (storage) {
+            await storage.setActiveConversationId(null)
+        }
     }, [abortActiveStream])
 
-    // One-shot hydration from storage on mount.
+    // One-shot hydration from storage on mount. Skipped entirely when no
+    // conversation storage provider has been configured.
     useEffect(() => {
+        if (!conversationStorageRef.current) {
+            conversationHydratedRef.current = true
+            return
+        }
         let cancelled = false
         ;(async () => {
             try {
-                const activeId = await conversationStorageRef.current.getActiveConversationId()
+                const storage = conversationStorageRef.current
+                const activeId = await storage.getActiveConversationId()
                 if (cancelled) return
                 if (!activeId) {
                     conversationHydratedRef.current = true
                     return
                 }
-                const full = await conversationStorageRef.current.getConversation(activeId)
+                const full = await storage.getConversation(activeId)
                 if (cancelled) return
                 if (full) {
                     setMessages(Array.isArray(full.messages) ? full.messages : [])
@@ -239,7 +252,7 @@ function Chat({modelStorage, conversationStorage}) {
                         createdAt: full.createdAt || null,
                     })
                 } else {
-                    await conversationStorageRef.current.setActiveConversationId(null)
+                    await storage.setActiveConversationId(null)
                 }
             } catch (err) {
                 console.error('Failed to hydrate conversation:', err)
@@ -253,8 +266,10 @@ function Chat({modelStorage, conversationStorage}) {
     }, [])
 
     // Autosave the active conversation whenever messages change. Debounced so
-    // streamed responses don't produce dozens of writes per second.
+    // streamed responses don't produce dozens of writes per second. Skipped
+    // entirely when no storage provider has been configured.
     useEffect(() => {
+        if (!conversationStorageRef.current) return
         if (!conversationHydratedRef.current) return
         if (!hasUserActivity(messages)) return
 
@@ -263,6 +278,8 @@ function Chat({modelStorage, conversationStorage}) {
         }
         autosaveTimerRef.current = setTimeout(async () => {
             try {
+                const storage = conversationStorageRef.current
+                if (!storage) return
                 const now = Date.now()
                 const id = activeConversationId || makeConversationId()
                 const createdAt = conversationMeta.createdAt || now
@@ -278,10 +295,10 @@ function Chat({modelStorage, conversationStorage}) {
                     messages,
                     version: 1,
                 }
-                await conversationStorageRef.current.saveConversation(conversation)
+                await storage.saveConversation(conversation)
                 if (!activeConversationId) {
                     setActiveConversationId(id)
-                    await conversationStorageRef.current.setActiveConversationId(id)
+                    await storage.setActiveConversationId(id)
                 }
                 if (conversationMeta.title !== title || conversationMeta.createdAt !== createdAt) {
                     setConversationMeta({title, createdAt})
@@ -562,28 +579,34 @@ function Chat({modelStorage, conversationStorage}) {
         <>
             <div className="d-flex justify-content-between align-items-center border-bottom py-1 px-3">
                 <div className="d-flex align-items-center gap-1">
-                    <button
-                        className="btn btn-sm btn-link text-white p-1 m-0"
-                        onClick={() => setShowConversations(true)}
-                        title="Conversations"
-                    >
-                        <i className="fas fa-comments"></i>
-                    </button>
-                    <button
-                        className="btn btn-sm btn-link text-white p-1 m-0"
-                        onClick={startNewConversation}
-                        title="New conversation"
-                    >
-                        <i className="fas fa-plus"></i>
-                    </button>
+                    {hasConversationStorage && (
+                        <>
+                            <button
+                                className="btn btn-sm btn-link text-white p-1 m-0"
+                                onClick={() => setShowConversations(true)}
+                                title="Conversations"
+                            >
+                                <i className="fas fa-comments"></i>
+                            </button>
+                            <button
+                                className="btn btn-sm btn-link text-white p-1 m-0"
+                                onClick={startNewConversation}
+                                title="New conversation"
+                            >
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </>
+                    )}
                     <button
                         className="btn btn-sm text-danger m-0"
                         onClick={startNewConversation}
-                        title="Clear conversation (starts a new one)"
+                        title={hasConversationStorage
+                            ? "Clear conversation (starts a new one)"
+                            : "Clear conversation"}
                     >
                         <i className="fas fa-eraser"></i>
                     </button>
-                    {conversationMeta.title && (
+                    {hasConversationStorage && conversationMeta.title && (
                         <span
                             className="text-white small text-truncate ms-2 d-none d-md-inline"
                             style={{maxWidth: '220px'}}
@@ -724,7 +747,7 @@ function Chat({modelStorage, conversationStorage}) {
                     onClose={() => setShowSettings(false)}
                 />
             )}
-            {showConversations && (
+            {hasConversationStorage && showConversations && (
                 <Conversations
                     conversationStorage={conversationStorageRef.current}
                     activeConversationId={activeConversationId}

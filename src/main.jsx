@@ -26,12 +26,14 @@ function initChatComponent(containerId, modelStorage, conversationStorage) {
       root = ReactDOM.createRoot(container);
     }
     const modelStorageProvider = modelStorage || new LocalStorageProvider()
-    const conversationStorageProvider = conversationStorage || new LocalStorageConversationProvider()
+    // conversationStorage is intentionally NOT defaulted: callers that do not
+    // supply a provider opt out of the conversation manager entirely and only
+    // keep the basic "clear conversation" behaviour.
     root.render(
       <React.StrictMode>
         <Chat
           modelStorage={modelStorageProvider}
-          conversationStorage={conversationStorageProvider}
+          conversationStorage={conversationStorage}
         />
       </React.StrictMode>
     );
