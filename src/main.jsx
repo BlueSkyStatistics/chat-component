@@ -13,12 +13,19 @@ let root = null;
 // Initialize the chat component inside a DOM container.
 //
 // Parameters:
-//   containerId         - DOM id to mount into
-//   modelStorage        - optional ModelStorageInterface implementation
-//                         (defaults to LocalStorageProvider)
-//   conversationStorage - optional ConversationStorageInterface implementation
-//                         (defaults to LocalStorageConversationProvider)
-function initChatComponent(containerId, modelStorage, conversationStorage) {
+//   containerId           - DOM id to mount into
+//   modelStorage          - optional ModelStorageInterface implementation
+//                           (defaults to LocalStorageProvider)
+//   conversationStorage   - optional ConversationStorageInterface implementation.
+//                           When omitted the conversation manager (listing,
+//                           autosave, restore, rename, delete, export/import)
+//                           is disabled. Pass LocalStorageConversationProvider
+//                           explicitly to opt in with the bundled default.
+//   onConversationError   - optional callback invoked with any error thrown by
+//                           the storage provider (e.g. localStorage quota
+//                           exceeded). Useful for surfacing the error in the
+//                           host application's UI.
+function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
@@ -26,30 +33,22 @@ function initChatComponent(containerId, modelStorage, conversationStorage) {
       root = ReactDOM.createRoot(container);
     }
     const modelStorageProvider = modelStorage || new LocalStorageProvider()
-    // conversationStorage is intentionally NOT defaulted: callers that do not
-    // supply a provider opt out of the conversation manager entirely and only
-    // keep the basic "clear conversation" behaviour.
     root.render(
       <React.StrictMode>
         <Chat
           modelStorage={modelStorageProvider}
           conversationStorage={conversationStorage}
+          onConversationError={onConversationError}
         />
       </React.StrictMode>
     );
   }
 }
 
-// Development mode
-if (import.meta.env.DEV) {
-  initChatComponent('chat-container', new LocalStorageProvider(), new LocalStorageConversationProvider())
-}
-
-// // Production mode
-// if (typeof window !== 'undefined') {
-//   window.initChatComponent = initChatComponent
-//   window.ModelStorageInterface = ModelStorageInterface
-//   window.ConversationStorageInterface = ConversationStorageInterface
+// Development mode: opt in to the bundled localStorage conversation provider
+// so the full conversation manager UI is exercised while developing.
+// if (import.meta.env.DEV) {
+//   initChatComponent('chat-container', new LocalStorageProvider(), new LocalStorageConversationProvider())
 // }
 
 export {

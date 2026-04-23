@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {
     exportAllConversations,
     exportConversation,
@@ -27,6 +27,8 @@ const formatDateTime = (ts) => {
  *      removed so Chat can fall back to a fresh conversation
  *  - onActiveConversationChanged(conversation): called when the user renames
  *      the currently active conversation so Chat can reflect the new title
+ *  - onStorageError(err): optional, forwards any storage provider error up to
+ *      the chat component so host apps can surface it in their own UI
  */
 function Conversations({
     conversationStorage,
@@ -36,6 +38,7 @@ function Conversations({
     onClose,
     onActiveConversationDeleted,
     onActiveConversationChanged,
+    onStorageError,
 }) {
     const [conversations, setConversations] = useState([])
     const [loading, setLoading] = useState(true)
@@ -47,6 +50,18 @@ function Conversations({
     const [confirmDeleteId, setConfirmDeleteId] = useState(null)
     const fileInputRef = useRef(null)
 
+    const reportError = (err, userMessage) => {
+        console.error(err)
+        if (onStorageError) {
+            try {
+                onStorageError(err)
+            } catch (cbErr) {
+                console.error('onStorageError callback threw:', cbErr)
+            }
+        }
+        setError(userMessage)
+    }
+
     const refresh = async () => {
         setLoading(true)
         setError(null)
@@ -54,8 +69,7 @@ function Conversations({
             const list = await conversationStorage.listConversations()
             setConversations(list || [])
         } catch (err) {
-            console.error('Failed to list conversations:', err)
-            setError('Failed to load conversations.')
+            reportError(err, 'Failed to load conversations.')
         } finally {
             setLoading(false)
         }
@@ -64,7 +78,19 @@ function Conversations({
     useEffect(() => {
         refresh()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [conversationStorage])
+
+    // Close on Escape for keyboard users.
+    useEffect(() => {
+        const handler = (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation()
+                onClose?.()
+            }
+        }
+        window.addEventListener('keydown', handler)
+        return () => window.removeEventListener('keydown', handler)
+    }, [onClose])
 
     const handleRestore = async (id) => {
         if (onRestore) await onRestore(id)
@@ -85,8 +111,7 @@ function Conversations({
             setConfirmDeleteId(null)
             await refresh()
         } catch (err) {
-            console.error('Failed to delete conversation:', err)
-            setError('Failed to delete conversation.')
+            reportError(err, 'Failed to delete conversation.')
         }
     }
 
@@ -115,8 +140,7 @@ function Conversations({
             }
             await refresh()
         } catch (err) {
-            console.error('Failed to rename conversation:', err)
-            setError('Failed to rename conversation.')
+            reportError(err, 'Failed to rename conversation.')
         }
     }
 
@@ -126,8 +150,7 @@ function Conversations({
             if (!full) return
             exportConversation(full)
         } catch (err) {
-            console.error('Failed to export conversation:', err)
-            setError('Failed to export conversation.')
+            reportError(err, 'Failed to export conversation.')
         }
     }
 
@@ -144,8 +167,7 @@ function Conversations({
             }
             exportAllConversations(toExport)
         } catch (err) {
-            console.error('Failed to export all conversations:', err)
-            setError('Failed to export conversations.')
+            reportError(err, 'Failed to export conversations.')
         }
     }
 
@@ -172,15 +194,40 @@ function Conversations({
         } catch (err) {
             console.error('Import failed:', err)
             setImportError(err.message || 'Import failed.')
+            if (onStorageError) {
+                try {
+                    onStorageError(err)
+                } catch (cbErr) {
+                    console.error('onStorageError callback threw:', cbErr)
+                }
+            }
         }
     }
 
     return (
         <>
-            <div className="modal-backdrop fade show" style={{zIndex: 1040}}></div>
+            {/* Clicking the backdrop dismisses the modal, matching Bootstrap's default behaviour. */}
+            <div
+                className="modal-backdrop fade show"
+                style={{zIndex: 1040}}
+                onClick={onClose}
+            ></div>
 
-            <div className="modal d-block" tabIndex="-1" style={{zIndex: 1050}}>
-                <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div
+                className="modal d-block"
+                tabIndex="-1"
+                style={{zIndex: 1050}}
+                onMouseDown={(e) => {
+                    // Only close when the mousedown originated on the dialog
+                    // wrapper itself (i.e. the dim area); clicks that start
+                    // inside .modal-content must never dismiss the modal.
+                    if (e.target === e.currentTarget) onClose?.()
+                }}
+            >
+                <div
+                    className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg"
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
                     <div className="modal-content">
                         <div className="modal-header">
                             <h5 className="modal-title">
@@ -295,43 +342,50 @@ function Conversations({
                                                         )}
                                                     </div>
                                                     {!isRenaming && (
-                                                        <div className="btn-group btn-group-sm flex-shrink-0" role="group">
-                                                            <button
-                                                                className="btn btn-outline-primary"
-                                                                onClick={() => handleRestore(meta.id)}
-                                                                disabled={isActive}
-                                                                title={isActive ? 'Already active' : 'Open this conversation'}
-                                                            >
-                                                                <i className="fas fa-folder-open"></i>
-                                                            </button>
-                                                            <button
-                                                                className="btn btn-outline-secondary"
-                                                                onClick={() => beginRename(meta)}
-                                                                title="Rename"
-                                                            >
-                                                                <i className="fas fa-pen"></i>
-                                                            </button>
-                                                            <button
-                                                                className="btn btn-outline-secondary"
-                                                                onClick={() => handleExportOne(meta.id)}
-                                                                title="Export as JSON"
-                                                            >
-                                                                <i className="fas fa-file-export"></i>
-                                                            </button>
-                                                            <button
-                                                                className={`btn ${isConfirmingDelete ? 'btn-danger' : 'btn-outline-danger'}`}
-                                                                onClick={() => {
-                                                                    if (isConfirmingDelete) {
-                                                                        handleDelete(meta.id)
-                                                                    } else {
-                                                                        setConfirmDeleteId(meta.id)
-                                                                    }
-                                                                }}
-                                                                onBlur={() => setConfirmDeleteId((cur) => (cur === meta.id ? null : cur))}
-                                                                title={isConfirmingDelete ? 'Click again to confirm' : 'Delete conversation'}
-                                                            >
-                                                                <i className="fas fa-trash-alt"></i>
-                                                            </button>
+                                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                                            {isConfirmingDelete && (
+                                                                <span className="text-danger small">
+                                                                    Click again to confirm
+                                                                </span>
+                                                            )}
+                                                            <div className="btn-group btn-group-sm" role="group">
+                                                                <button
+                                                                    className="btn btn-outline-primary"
+                                                                    onClick={() => handleRestore(meta.id)}
+                                                                    disabled={isActive}
+                                                                    title={isActive ? 'Already active' : 'Open this conversation'}
+                                                                >
+                                                                    <i className="fas fa-folder-open"></i>
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-outline-secondary"
+                                                                    onClick={() => beginRename(meta)}
+                                                                    title="Rename"
+                                                                >
+                                                                    <i className="fas fa-pen"></i>
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-outline-secondary"
+                                                                    onClick={() => handleExportOne(meta.id)}
+                                                                    title="Export as JSON"
+                                                                >
+                                                                    <i className="fas fa-file-export"></i>
+                                                                </button>
+                                                                <button
+                                                                    className={`btn ${isConfirmingDelete ? 'btn-danger' : 'btn-outline-danger'}`}
+                                                                    onClick={() => {
+                                                                        if (isConfirmingDelete) {
+                                                                            handleDelete(meta.id)
+                                                                        } else {
+                                                                            setConfirmDeleteId(meta.id)
+                                                                        }
+                                                                    }}
+                                                                    onBlur={() => setConfirmDeleteId((cur) => (cur === meta.id ? null : cur))}
+                                                                    title={isConfirmingDelete ? 'Click again to confirm' : 'Delete conversation'}
+                                                                >
+                                                                    <i className="fas fa-trash-alt"></i>
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>

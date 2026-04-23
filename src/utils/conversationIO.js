@@ -20,10 +20,16 @@ export const EXPORT_VERSION = 1;
 const CURRENT_SCHEMA_VERSION = 1;
 
 /**
- * Generate a reasonably unique conversation id. Combines time + randomness
- * so repeated calls within the same millisecond do not collide.
+ * Generate a reasonably unique conversation id. Uses the platform's secure
+ * RNG when available (all modern browsers + Electron) and falls back to a
+ * timestamp+Math.random() hybrid otherwise.
  */
 export const makeConversationId = () => {
+    if (typeof globalThis !== 'undefined'
+        && globalThis.crypto
+        && typeof globalThis.crypto.randomUUID === 'function') {
+        return `conv-${globalThis.crypto.randomUUID()}`;
+    }
     const rand = Math.random().toString(36).slice(2, 10);
     return `conv-${Date.now().toString(36)}-${rand}`;
 };
@@ -129,6 +135,16 @@ export const parseImportedConversations = (text, {existingTitles = []} = {}) => 
     if (Array.isArray(parsed)) {
         rawList = parsed;
     } else if (parsed && Array.isArray(parsed.conversations)) {
+        // A top-level envelope can declare its own format/version. We only
+        // reject envelopes that claim to be a DIFFERENT format or a newer
+        // version than we understand — a bare envelope without these fields
+        // (which some third-party tools may produce) is still accepted.
+        if (typeof parsed.format === 'string' && parsed.format !== EXPORT_FORMAT) {
+            throw new Error(`Unsupported file format "${parsed.format}" (expected "${EXPORT_FORMAT}").`);
+        }
+        if (typeof parsed.version === 'number' && parsed.version > EXPORT_VERSION) {
+            throw new Error(`Unsupported export version ${parsed.version}; this build understands version ${EXPORT_VERSION} or older.`);
+        }
         rawList = parsed.conversations;
     } else if (parsed && typeof parsed === 'object' && (parsed.id || parsed.messages)) {
         rawList = [parsed];

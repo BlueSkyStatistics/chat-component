@@ -27,8 +27,10 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
-function Chat({modelStorage, conversationStorage}) {
-    const [messages, setMessages] = useState([makeGreetingMessage()])
+function Chat({modelStorage, conversationStorage, onConversationError}) {
+    // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
+    // on every render (useState ignores subsequent values anyway).
+    const [messages, setMessages] = useState(() => [makeGreetingMessage()])
     const [inputValue, setInputValue] = useState('')
     const [showSettings, setShowSettings] = useState(false)
     const [showConversations, setShowConversations] = useState(false)
@@ -69,6 +71,45 @@ function Chat({modelStorage, conversationStorage}) {
     // and the eraser button falls back to "just clear messages".
     const conversationStorageRef = useRef(conversationStorage || null);
     const hasConversationStorage = !!conversationStorage;
+    // Keep the ref in sync with prop swaps so a host app can change provider
+    // without remounting the component.
+    useEffect(() => {
+        conversationStorageRef.current = conversationStorage || null
+    }, [conversationStorage])
+
+    // Callback ref for storage errors so host apps can surface them in their
+    // own UI. Updated via effect to avoid stale closures inside long-lived
+    // callbacks (hydration / autosave).
+    const onConversationErrorRef = useRef(onConversationError)
+    useEffect(() => {
+        onConversationErrorRef.current = onConversationError
+    }, [onConversationError])
+    const reportStorageError = useCallback((err) => {
+        console.error(err)
+        try {
+            onConversationErrorRef.current?.(err)
+        } catch (cbErr) {
+            console.error('onConversationError callback threw:', cbErr)
+        }
+    }, [])
+
+    // When set, skip exactly one run of the autosave effect. Used after
+    // hydration / restore so merely opening a conversation does not bump its
+    // updatedAt timestamp with identical content.
+    const skipNextAutosaveRef = useRef(false)
+
+    // Mirror of conversationMeta used inside the autosave callback so that
+    // renaming a conversation does NOT retrigger the autosave (the rename
+    // path already persists the new title explicitly).
+    const conversationMetaRef = useRef({title: DEFAULT_TITLE, createdAt: null})
+
+    // Mirror of messages, kept in sync via effect. Lets async callbacks
+    // (notably hydration) check the latest value without re-running whenever
+    // messages change.
+    const messagesRef = useRef(messages)
+    useEffect(() => {
+        messagesRef.current = messages
+    }, [messages])
 
     const refreshModels = useCallback(async () => {
         const savedModels = await storageProviderRef.current.getModels();
@@ -184,20 +225,30 @@ function Chat({modelStorage, conversationStorage}) {
     }, [])
 
     // Load messages from a stored conversation into the UI.
-    // Note: this does not clobber the hydration flag; the autosave effect's
-    // hasUserActivity check keeps things sane, and if a save does fire on
-    // load it simply touches updatedAt on the just-opened conversation.
+    // The autosave effect is suppressed for exactly one run after this so that
+    // merely opening a conversation does not bump its updatedAt timestamp.
     const loadConversation = useCallback(async (id) => {
         if (!id) return
         const storage = conversationStorageRef.current
         if (!storage) return
         abortActiveStream()
-        const full = await storage.getConversation(id)
-        if (!full) {
-            // Stale pointer in storage; forget it so we start fresh next time.
-            await storage.setActiveConversationId(null)
+        let full
+        try {
+            full = await storage.getConversation(id)
+        } catch (err) {
+            reportStorageError(err)
             return
         }
+        if (!full) {
+            // Stale pointer in storage; forget it so we start fresh next time.
+            try {
+                await storage.setActiveConversationId(null)
+            } catch (err) {
+                reportStorageError(err)
+            }
+            return
+        }
+        skipNextAutosaveRef.current = true
         setMessages(Array.isArray(full.messages) ? full.messages : [])
         setPendingAttachments([])
         setActiveConversationId(full.id)
@@ -205,8 +256,12 @@ function Chat({modelStorage, conversationStorage}) {
             title: full.title || DEFAULT_TITLE,
             createdAt: full.createdAt || null,
         })
-        await storage.setActiveConversationId(full.id)
-    }, [abortActiveStream])
+        try {
+            await storage.setActiveConversationId(full.id)
+        } catch (err) {
+            reportStorageError(err)
+        }
+    }, [abortActiveStream, reportStorageError])
 
     // Reset the UI to a brand-new, unsaved conversation (greeting only).
     // When a storage provider is configured the previously-active conversation
@@ -221,12 +276,21 @@ function Chat({modelStorage, conversationStorage}) {
         setConversationMeta({title: DEFAULT_TITLE, createdAt: null})
         const storage = conversationStorageRef.current
         if (storage) {
-            await storage.setActiveConversationId(null)
+            try {
+                await storage.setActiveConversationId(null)
+            } catch (err) {
+                reportStorageError(err)
+            }
         }
-    }, [abortActiveStream])
+    }, [abortActiveStream, reportStorageError])
 
     // One-shot hydration from storage on mount. Skipped entirely when no
     // conversation storage provider has been configured.
+    //
+    // While hydration is in flight, the user can already type and send a
+    // message. To avoid clobbering that input, we only overwrite `messages`
+    // when the user has not yet contributed anything (i.e. the array is still
+    // the untouched greeting-only placeholder).
     useEffect(() => {
         if (!conversationStorageRef.current) {
             conversationHydratedRef.current = true
@@ -245,6 +309,13 @@ function Chat({modelStorage, conversationStorage}) {
                 const full = await storage.getConversation(activeId)
                 if (cancelled) return
                 if (full) {
+                    // Bail if the user has already started typing / sending
+                    // during the async window; a remote provider could take
+                    // long enough for this to matter.
+                    if (hasUserActivity(messagesRef.current)) {
+                        return
+                    }
+                    skipNextAutosaveRef.current = true
                     setMessages(Array.isArray(full.messages) ? full.messages : [])
                     setActiveConversationId(full.id)
                     setConversationMeta({
@@ -255,7 +326,7 @@ function Chat({modelStorage, conversationStorage}) {
                     await storage.setActiveConversationId(null)
                 }
             } catch (err) {
-                console.error('Failed to hydrate conversation:', err)
+                reportStorageError(err)
             } finally {
                 if (!cancelled) conversationHydratedRef.current = true
             }
@@ -263,29 +334,41 @@ function Chat({modelStorage, conversationStorage}) {
         return () => {
             cancelled = true
         }
-    }, [])
+    }, [reportStorageError])
+
+    // Keep the meta ref current so the autosave callback always sees the
+    // latest title/createdAt without needing them in its dependency array.
+    useEffect(() => {
+        conversationMetaRef.current = conversationMeta
+    }, [conversationMeta])
 
     // Autosave the active conversation whenever messages change. Debounced so
     // streamed responses don't produce dozens of writes per second. Skipped
     // entirely when no storage provider has been configured.
+    //
+    // Title / createdAt intentionally are NOT in the dep array: rename and
+    // restore already persist what they need to persist, and including them
+    // here would produce redundant writes that only bump updatedAt.
     useEffect(() => {
         if (!conversationStorageRef.current) return
         if (!conversationHydratedRef.current) return
         if (!hasUserActivity(messages)) return
-
-        if (autosaveTimerRef.current) {
-            clearTimeout(autosaveTimerRef.current)
+        if (skipNextAutosaveRef.current) {
+            skipNextAutosaveRef.current = false
+            return
         }
-        autosaveTimerRef.current = setTimeout(async () => {
+
+        const timerId = setTimeout(async () => {
             try {
                 const storage = conversationStorageRef.current
                 if (!storage) return
                 const now = Date.now()
                 const id = activeConversationId || makeConversationId()
-                const createdAt = conversationMeta.createdAt || now
+                const meta = conversationMetaRef.current
+                const createdAt = meta.createdAt || now
                 // Keep a user-edited title; otherwise re-derive from messages.
-                const title = conversationMeta.title && conversationMeta.title !== DEFAULT_TITLE
-                    ? conversationMeta.title
+                const title = meta.title && meta.title !== DEFAULT_TITLE
+                    ? meta.title
                     : deriveConversationTitle(messages)
                 const conversation = {
                     id,
@@ -298,22 +381,25 @@ function Chat({modelStorage, conversationStorage}) {
                 await storage.saveConversation(conversation)
                 if (!activeConversationId) {
                     setActiveConversationId(id)
-                    await storage.setActiveConversationId(id)
+                    try {
+                        await storage.setActiveConversationId(id)
+                    } catch (err) {
+                        reportStorageError(err)
+                    }
                 }
-                if (conversationMeta.title !== title || conversationMeta.createdAt !== createdAt) {
+                if (meta.title !== title || meta.createdAt !== createdAt) {
                     setConversationMeta({title, createdAt})
                 }
             } catch (err) {
-                console.error('Failed to autosave conversation:', err)
+                reportStorageError(err)
             }
         }, AUTOSAVE_DEBOUNCE_MS)
+        autosaveTimerRef.current = timerId
 
         return () => {
-            if (autosaveTimerRef.current) {
-                clearTimeout(autosaveTimerRef.current)
-            }
+            clearTimeout(timerId)
         }
-    }, [messages, activeConversationId, conversationMeta.title, conversationMeta.createdAt])
+    }, [messages, activeConversationId, reportStorageError])
 
     // Called from the Conversations modal when the user renames the active
     // conversation; keeps the in-memory title in sync.
@@ -686,7 +772,7 @@ function Chat({modelStorage, conversationStorage}) {
                 <div ref={messagesEndRef} />
             </div>
 
-{showAttachmentBar && (
+            {showAttachmentBar && (
                 <PendingAttachments
                     attachments={pendingAttachments}
                     expandedAttachments={expandedAttachments}
@@ -697,8 +783,8 @@ function Chat({modelStorage, conversationStorage}) {
                     getIconForType={getIconForType}
                 />
             )}
-            
-<form onSubmit={handleSubmit} className="border-top p-2 m-0 pt-3">
+
+            <form onSubmit={handleSubmit} className="border-top p-2 m-0 pt-3">
                 <div className="input-group">
                     {pendingAttachments.length > 0 && (
                         <button
@@ -756,6 +842,7 @@ function Chat({modelStorage, conversationStorage}) {
                     onClose={() => setShowConversations(false)}
                     onActiveConversationDeleted={startNewConversation}
                     onActiveConversationChanged={handleActiveConversationRenamed}
+                    onStorageError={reportStorageError}
                 />
             )}
         </>

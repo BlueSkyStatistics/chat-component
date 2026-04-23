@@ -95,8 +95,18 @@ export class LocalStorageConversationProvider extends ConversationStorageInterfa
         }
     }
 
+    // Writes are not swallowed: localStorage can throw QuotaExceededError or
+    // similar on large payloads, and callers (notably the autosave effect in
+    // Chat.jsx) rely on that error surfacing so host apps can react to it.
     _writeIndex(index) {
-        localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+        try {
+            localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+        } catch (err) {
+            throw new Error(
+                `Failed to write conversations index (${err && err.name ? err.name : 'unknown error'}): ${err && err.message ? err.message : err}`,
+                {cause: err}
+            );
+        }
     }
 
     async listConversations() {
@@ -124,7 +134,15 @@ export class LocalStorageConversationProvider extends ConversationStorageInterfa
             version: 1,
             ...conversation,
         };
-        localStorage.setItem(conversationKey(toPersist.id), JSON.stringify(toPersist));
+        const key = conversationKey(toPersist.id);
+        try {
+            localStorage.setItem(key, JSON.stringify(toPersist));
+        } catch (err) {
+            throw new Error(
+                `Failed to write conversation ${toPersist.id} (${err && err.name ? err.name : 'unknown error'}): ${err && err.message ? err.message : err}`,
+                {cause: err}
+            );
+        }
 
         const index = this._readIndex();
         const existingIdx = index.findIndex((c) => c.id === toPersist.id);
@@ -140,7 +158,19 @@ export class LocalStorageConversationProvider extends ConversationStorageInterfa
         } else {
             index.push(meta);
         }
-        this._writeIndex(index);
+        // If the index write fails we try to roll back the per-conversation
+        // payload write we just did, so the index never gets out of sync with
+        // actually-present conversation bodies.
+        try {
+            this._writeIndex(index);
+        } catch (err) {
+            try {
+                localStorage.removeItem(key);
+            } catch (_) {
+                // best-effort rollback
+            }
+            throw err;
+        }
     }
 
     async deleteConversation(id) {

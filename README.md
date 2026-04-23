@@ -19,16 +19,21 @@ npm run build  # for production
 - Streaming responses
 - Copy to clipboard functionality
 - Raw/formatted message view toggle
-- Conversation management: store, restore, rename, delete, export and import conversations
+- Conversation management (opt-in): store, restore, rename, delete, export and import conversations
 
 ## Conversation Management
 
-The chat component automatically persists the active conversation and lets users
-switch between saved ones, delete them, and move them between machines via
-export/import. Open the conversations panel from the header's
-`fa-comments` button.
+Conversation management is **opt-in**. When a host app supplies a
+`ConversationStorageInterface` implementation (see below) the chat component
+persists the active conversation, lets users switch between saved ones, delete
+them, and move them between machines via export/import. The conversations
+panel opens from the header's `fa-comments` button.
 
-Features exposed from the panel:
+When no provider is supplied the panel, "New conversation" button and title
+badge are hidden; the eraser button remains and simply resets the current
+in-memory messages.
+
+Features exposed from the panel (when enabled):
 
 - **New conversation**: reset the chat and start a fresh thread. The previous
   conversation remains stored (also available via the eraser / `+` button in
@@ -42,8 +47,10 @@ Features exposed from the panel:
 
 ### Storage
 
-Conversations are stored via a `ConversationStorageInterface`. A default
-`LocalStorageConversationProvider` is used when none is supplied. Electron apps
+Conversations are stored via a `ConversationStorageInterface`. The library
+ships with a browser-only `LocalStorageConversationProvider`, but
+`initChatComponent` does **not** default it for you — you must explicitly pass
+either the bundled provider or your own implementation to opt in. Electron apps
 can plug in their own provider (e.g. backed by `electron-store` or a local
 database) by implementing the interface:
 
@@ -51,6 +58,7 @@ database) by implementing the interface:
 import {
   initChatComponent,
   ConversationStorageInterface,
+  LocalStorageConversationProvider,
 } from '@bluesky/chat';
 
 class MyElectronConversationStorage extends ConversationStorageInterface {
@@ -63,8 +71,23 @@ class MyElectronConversationStorage extends ConversationStorageInterface {
   async setActiveConversationId(id) { /* ... */ }
 }
 
+// Opt in with your own provider …
 initChatComponent('chat-container', myModelStorage, new MyElectronConversationStorage());
+
+// … or with the bundled localStorage provider (browser only).
+initChatComponent('chat-container', myModelStorage, new LocalStorageConversationProvider());
+
+// Omit the argument entirely to disable the feature.
+initChatComponent('chat-container', myModelStorage);
 ```
+
+### Error handling
+
+`initChatComponent` accepts an optional fourth argument, `onConversationError(err)`,
+which is invoked whenever the component fails to read from or write to the
+storage provider (for example a localStorage quota-exceeded error). Use it to
+surface errors in your host UI; when omitted, errors are only logged to the
+console.
 
 ### Export format
 

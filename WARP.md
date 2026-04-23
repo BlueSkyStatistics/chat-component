@@ -83,11 +83,13 @@ ConversationStorageInterface (abstract)
 **Integration pattern:**
 - Custom model storage providers must implement `ModelStorageInterface`: `getModels()`, `saveModels()`, `getSelectedModel()`, `saveSelectedModel()`.
 - Custom conversation storage providers must implement `ConversationStorageInterface`: `listConversations()`, `getConversation(id)`, `saveConversation(conversation)`, `deleteConversation(id)`, `clearAll()`, `getActiveConversationId()`, `setActiveConversationId(id)`.
-- Pass both providers to `initChatComponent(containerId, modelStorage, conversationStorage)`.
+- Signature is `initChatComponent(containerId, modelStorage, conversationStorage, onConversationError)`.
+- `conversationStorage` is **opt-in**: if you do not pass a provider the conversation manager (listing, autosave, restore, rename, delete, export/import) is disabled and the eraser button falls back to "just clear messages". `LocalStorageConversationProvider` ships with the library but is never silently defaulted.
+- `onConversationError(err)` is optional; when supplied it receives any storage error (e.g. localStorage `QuotaExceededError`) so host apps can surface it in their own UI.
 - This enables Electron apps to use their own storage (e.g., electron-store, SQLite, remote API).
 
 **Conversation autosave / lifecycle:**
-- The active conversation is stored with debounced autosave (~500ms) after every `messages` change, once the user has contributed at least one message.
+- Debounced autosave (~500ms) of the active conversation runs after genuine `messages` mutations, once the user has contributed at least one message. Restoring a conversation and renaming its title do **not** retrigger an autosave by themselves.
 - A "new conversation" resets the in-memory state and forgets the active pointer; the previously-saved conversation remains in storage.
 - Restoring a conversation replaces the in-memory messages and updates the active pointer.
 - Localstorage keys used by the default provider: `bsc.conversations.index`, `bsc.conversation.<id>`, `bsc.activeConversationId`.
