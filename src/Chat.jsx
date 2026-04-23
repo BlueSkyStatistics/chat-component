@@ -3,23 +3,36 @@ import {formatMessage} from './attachmentFormatters'
 import 'katex/dist/katex.min.css'
 import './Chat.css'
 import Settings from './Settings'
+import Conversations from './Conversations'
 import Message from './components/Message'
 import PendingAttachments from './components/PendingAttachments'
+import {LocalStorageConversationProvider} from './storage/conversationStorage'
+import {deriveConversationTitle, makeConversationId} from './utils/conversationIO'
 
 const makeModelId = (model) => `${model.name}-${model.endpoint}`;
 
-function Chat({modelStorage}) {
-    const [messages, setMessages] = useState([
-        {
-            content: 'Hi, how can I help you?',
-            role: 'assistant',
-            id: Date.now(),
-            showRaw: false,
-            showAttachments: false
-        }
-    ])
+const DEFAULT_TITLE = 'New Conversation'
+const AUTOSAVE_DEBOUNCE_MS = 500
+
+const makeGreetingMessage = () => ({
+    content: 'Hi, how can I help you?',
+    role: 'assistant',
+    id: Date.now(),
+    showRaw: false,
+    showAttachments: false,
+})
+
+// A conversation is considered "worth persisting" only once the user has
+// actually contributed something. Otherwise we'd spam storage with empty
+// greeting-only placeholders on every page load.
+const hasUserActivity = (messages) =>
+    Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
+
+function Chat({modelStorage, conversationStorage}) {
+    const [messages, setMessages] = useState([makeGreetingMessage()])
     const [inputValue, setInputValue] = useState('')
     const [showSettings, setShowSettings] = useState(false)
+    const [showConversations, setShowConversations] = useState(false)
     const [models, setModels] = useState([])
     const [selectedModel, setSelectedModel] = useState(null)
     const [isStreaming, setIsStreaming] = useState(false)
@@ -27,10 +40,17 @@ function Chat({modelStorage}) {
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
     const [expandedAttachments, setExpandedAttachments] = useState(new Set())
     const [showAttachmentBar, setShowAttachmentBar] = useState(false)
+    const [activeConversationId, setActiveConversationId] = useState(null)
+    const [conversationMeta, setConversationMeta] = useState({
+        title: DEFAULT_TITLE,
+        createdAt: null,
+    })
     const abortControllerRef = useRef(null)
     const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
     const inputRef = useRef(null)
+    const autosaveTimerRef = useRef(null)
+    const conversationHydratedRef = useRef(false)
 
     // Handle scroll events to determine if we should auto-scroll
     const handleScroll = () => {
@@ -45,6 +65,9 @@ function Chat({modelStorage}) {
     };
 
     const storageProviderRef = useRef(modelStorage);
+    const conversationStorageRef = useRef(
+        conversationStorage || new LocalStorageConversationProvider()
+    );
 
     const refreshModels = useCallback(async () => {
         const savedModels = await storageProviderRef.current.getModels();
@@ -148,12 +171,141 @@ function Chat({modelStorage}) {
         setMessages(messages.filter(msg => msg.id !== messageId))
     }
 
-    const clearConversation = () => {
-        // if (window.confirm('Are you sure you want to clear the entire conversation? This action cannot be undone.')) {
-            setMessages([])
-            setPendingAttachments([])
-        // }
-    }
+    // Cancel any in-flight streaming without mutating the message list.
+    // Used when switching/clearing a conversation so the old assistant response
+    // does not continue populating the freshly-loaded one.
+    const abortActiveStream = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+            abortControllerRef.current = null
+        }
+        setIsStreaming(false)
+    }, [])
+
+    // Load messages from a stored conversation into the UI.
+    const loadConversation = useCallback(async (id) => {
+        if (!id) return
+        abortActiveStream()
+        const full = await conversationStorageRef.current.getConversation(id)
+        if (!full) {
+            // Stale pointer in storage; forget it so we start fresh next time.
+            await conversationStorageRef.current.setActiveConversationId(null)
+            return
+        }
+        // Skip autosave on this render; we're hydrating, not mutating.
+        conversationHydratedRef.current = false
+        setMessages(Array.isArray(full.messages) ? full.messages : [])
+        setPendingAttachments([])
+        setActiveConversationId(full.id)
+        setConversationMeta({
+            title: full.title || DEFAULT_TITLE,
+            createdAt: full.createdAt || null,
+        })
+        await conversationStorageRef.current.setActiveConversationId(full.id)
+    }, [abortActiveStream])
+
+    // Reset the UI to a brand-new, unsaved conversation (greeting only).
+    // The previously-active conversation remains in storage untouched.
+    const startNewConversation = useCallback(async () => {
+        abortActiveStream()
+        conversationHydratedRef.current = false
+        setMessages([makeGreetingMessage()])
+        setPendingAttachments([])
+        setActiveConversationId(null)
+        setConversationMeta({title: DEFAULT_TITLE, createdAt: null})
+        await conversationStorageRef.current.setActiveConversationId(null)
+    }, [abortActiveStream])
+
+    // One-shot hydration from storage on mount.
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            try {
+                const activeId = await conversationStorageRef.current.getActiveConversationId()
+                if (cancelled) return
+                if (!activeId) {
+                    conversationHydratedRef.current = true
+                    return
+                }
+                const full = await conversationStorageRef.current.getConversation(activeId)
+                if (cancelled) return
+                if (full) {
+                    setMessages(Array.isArray(full.messages) ? full.messages : [])
+                    setActiveConversationId(full.id)
+                    setConversationMeta({
+                        title: full.title || DEFAULT_TITLE,
+                        createdAt: full.createdAt || null,
+                    })
+                } else {
+                    await conversationStorageRef.current.setActiveConversationId(null)
+                }
+            } catch (err) {
+                console.error('Failed to hydrate conversation:', err)
+            } finally {
+                if (!cancelled) conversationHydratedRef.current = true
+            }
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    // Autosave the active conversation whenever messages change. Debounced so
+    // streamed responses don't produce dozens of writes per second.
+    useEffect(() => {
+        if (!conversationHydratedRef.current) return
+        if (!hasUserActivity(messages)) return
+
+        if (autosaveTimerRef.current) {
+            clearTimeout(autosaveTimerRef.current)
+        }
+        autosaveTimerRef.current = setTimeout(async () => {
+            try {
+                const now = Date.now()
+                const id = activeConversationId || makeConversationId()
+                const createdAt = conversationMeta.createdAt || now
+                // Keep a user-edited title; otherwise re-derive from messages.
+                const title = conversationMeta.title && conversationMeta.title !== DEFAULT_TITLE
+                    ? conversationMeta.title
+                    : deriveConversationTitle(messages)
+                const conversation = {
+                    id,
+                    title,
+                    createdAt,
+                    updatedAt: now,
+                    messages,
+                    version: 1,
+                }
+                await conversationStorageRef.current.saveConversation(conversation)
+                if (!activeConversationId) {
+                    setActiveConversationId(id)
+                    await conversationStorageRef.current.setActiveConversationId(id)
+                }
+                if (conversationMeta.title !== title || conversationMeta.createdAt !== createdAt) {
+                    setConversationMeta({title, createdAt})
+                }
+            } catch (err) {
+                console.error('Failed to autosave conversation:', err)
+            }
+        }, AUTOSAVE_DEBOUNCE_MS)
+
+        return () => {
+            if (autosaveTimerRef.current) {
+                clearTimeout(autosaveTimerRef.current)
+            }
+        }
+    }, [messages, activeConversationId, conversationMeta.title, conversationMeta.createdAt])
+
+    // Called from the Conversations modal when the user renames the active
+    // conversation; keeps the in-memory title in sync.
+    const handleActiveConversationRenamed = useCallback((updated) => {
+        if (!updated) return
+        setConversationMeta((prev) => ({
+            ...prev,
+            title: updated.title,
+            createdAt: updated.createdAt ?? prev.createdAt,
+        }))
+    }, [])
 
     const toggleMessageView = (messageId) => {
         setMessages(messages.map(msg =>
@@ -407,14 +559,39 @@ function Chat({modelStorage}) {
     return (
         <>
             <div className="d-flex justify-content-between align-items-center border-bottom py-1 px-3">
-                <button 
-                    className="btn btn-sm text-danger m-0"
-                    onClick={clearConversation}
-                    title="Clear conversation"
-                >
-                    <i className="fas fa-eraser"></i>
-                </button>
-                
+                <div className="d-flex align-items-center gap-1">
+                    <button
+                        className="btn btn-sm btn-link text-white p-1 m-0"
+                        onClick={() => setShowConversations(true)}
+                        title="Conversations"
+                    >
+                        <i className="fas fa-comments"></i>
+                    </button>
+                    <button
+                        className="btn btn-sm btn-link text-white p-1 m-0"
+                        onClick={startNewConversation}
+                        title="New conversation"
+                    >
+                        <i className="fas fa-plus"></i>
+                    </button>
+                    <button
+                        className="btn btn-sm text-danger m-0"
+                        onClick={startNewConversation}
+                        title="Clear conversation (starts a new one)"
+                    >
+                        <i className="fas fa-eraser"></i>
+                    </button>
+                    {conversationMeta.title && (
+                        <span
+                            className="text-white small text-truncate ms-2 d-none d-md-inline"
+                            style={{maxWidth: '220px'}}
+                            title={conversationMeta.title}
+                        >
+                            {conversationMeta.title}
+                        </span>
+                    )}
+                </div>
+
                 <div className="d-flex align-items-center gap-2">
                     {selectedModel && (
                         <span className="text-white">
@@ -543,6 +720,17 @@ function Chat({modelStorage}) {
                     models={models}
                     onSave={handleSaveSettings}
                     onClose={() => setShowSettings(false)}
+                />
+            )}
+            {showConversations && (
+                <Conversations
+                    conversationStorage={conversationStorageRef.current}
+                    activeConversationId={activeConversationId}
+                    onRestore={loadConversation}
+                    onNew={startNewConversation}
+                    onClose={() => setShowConversations(false)}
+                    onActiveConversationDeleted={startNewConversation}
+                    onActiveConversationChanged={handleActiveConversationRenamed}
                 />
             )}
         </>

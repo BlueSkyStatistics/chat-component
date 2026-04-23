@@ -67,20 +67,41 @@ main.jsx (Entry point)
 
 4. **Attachment System (`attachmentFormatters.js`)**: Template-based formatting system that converts structured attachment objects into markdown for the AI model.
 
+5. **Conversations Component (`Conversations.jsx`)**: Bootstrap modal for managing stored conversations (list, restore, rename, delete, export, import). Uses `utils/conversationIO.js` for download / file parsing helpers.
+
 ### Storage Interface Pattern
 
-The codebase uses a **storage interface pattern** to allow different storage backends:
+The codebase uses a **storage interface pattern** to allow different storage backends. Two interfaces are provided:
 
 ```javascript
 ModelStorageInterface (abstract)
-  └── LocalStorageProvider (browser implementation)
+  └── LocalStorageProvider
+ConversationStorageInterface (abstract)
+  └── LocalStorageConversationProvider
 ```
 
 **Integration pattern:**
-- Custom storage providers must implement `ModelStorageInterface`
-- Methods: `getModels()`, `saveModels()`, `getSelectedModel()`, `saveSelectedModel()`
-- Pass storage provider to `initChatComponent(containerId, modelStorage)`
-- This enables Electron apps to use their own storage (e.g., electron-store)
+- Custom model storage providers must implement `ModelStorageInterface`: `getModels()`, `saveModels()`, `getSelectedModel()`, `saveSelectedModel()`.
+- Custom conversation storage providers must implement `ConversationStorageInterface`: `listConversations()`, `getConversation(id)`, `saveConversation(conversation)`, `deleteConversation(id)`, `clearAll()`, `getActiveConversationId()`, `setActiveConversationId(id)`.
+- Pass both providers to `initChatComponent(containerId, modelStorage, conversationStorage)`.
+- This enables Electron apps to use their own storage (e.g., electron-store, SQLite, remote API).
+
+**Conversation autosave / lifecycle:**
+- The active conversation is stored with debounced autosave (~500ms) after every `messages` change, once the user has contributed at least one message.
+- A "new conversation" resets the in-memory state and forgets the active pointer; the previously-saved conversation remains in storage.
+- Restoring a conversation replaces the in-memory messages and updates the active pointer.
+- Localstorage keys used by the default provider: `bsc.conversations.index`, `bsc.conversation.<id>`, `bsc.activeConversationId`.
+
+**Export / import format (see `utils/conversationIO.js`):**
+```json
+{
+  "format": "bluesky.chat.conversations",
+  "version": 1,
+  "exportedAt": 1700000000000,
+  "conversations": [ { "id": "conv-...", "title": "...", "messages": [ ... ] } ]
+}
+```
+The import parser also accepts a single conversation object or a bare array of conversations. Imported conversations always get fresh ids so existing ones are never overwritten silently.
 
 ### Template System
 

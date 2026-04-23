@@ -2,12 +2,23 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import Chat from './Chat'
 import { LocalStorageProvider, ModelStorageInterface } from './storage/modelStorage'
+import {
+  ConversationStorageInterface,
+  LocalStorageConversationProvider,
+} from './storage/conversationStorage'
 
 // Store the root instance
 let root = null;
 
-// Create a function to initialize the chat component
-function initChatComponent(containerId, modelStorage) {
+// Initialize the chat component inside a DOM container.
+//
+// Parameters:
+//   containerId         - DOM id to mount into
+//   modelStorage        - optional ModelStorageInterface implementation
+//                         (defaults to LocalStorageProvider)
+//   conversationStorage - optional ConversationStorageInterface implementation
+//                         (defaults to LocalStorageConversationProvider)
+function initChatComponent(containerId, modelStorage, conversationStorage) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
@@ -15,9 +26,13 @@ function initChatComponent(containerId, modelStorage) {
       root = ReactDOM.createRoot(container);
     }
     const modelStorageProvider = modelStorage || new LocalStorageProvider()
+    const conversationStorageProvider = conversationStorage || new LocalStorageConversationProvider()
     root.render(
       <React.StrictMode>
-        <Chat modelStorage={modelStorageProvider} />
+        <Chat
+          modelStorage={modelStorageProvider}
+          conversationStorage={conversationStorageProvider}
+        />
       </React.StrictMode>
     );
   }
@@ -25,13 +40,20 @@ function initChatComponent(containerId, modelStorage) {
 
 // Development mode
 if (import.meta.env.DEV) {
-  initChatComponent('chat-container', new LocalStorageProvider())
+  initChatComponent('chat-container', new LocalStorageProvider(), new LocalStorageConversationProvider())
 }
 
 // // Production mode
 // if (typeof window !== 'undefined') {
 //   window.initChatComponent = initChatComponent
 //   window.ModelStorageInterface = ModelStorageInterface
+//   window.ConversationStorageInterface = ConversationStorageInterface
 // }
 
-export { initChatComponent, ModelStorageInterface }
+export {
+  initChatComponent,
+  ModelStorageInterface,
+  LocalStorageProvider,
+  ConversationStorageInterface,
+  LocalStorageConversationProvider,
+}
