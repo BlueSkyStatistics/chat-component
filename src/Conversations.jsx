@@ -242,11 +242,11 @@ function Conversations({
                                 <button className="btn btn-primary btn-sm" onClick={handleNew}>
                                     <i className="fas fa-plus me-1"></i> New Conversation
                                 </button>
-                                <button className="btn btn-outline-secondary btn-sm" onClick={handleImportClick}>
+                                <button className="btn btn-secondary btn-sm" onClick={handleImportClick}>
                                     <i className="fas fa-file-import me-1"></i> Import
                                 </button>
                                 <button
-                                    className="btn btn-outline-secondary btn-sm"
+                                    className="btn btn-secondary btn-sm"
                                     onClick={handleExportAll}
                                     disabled={conversations.length === 0}
                                 >
@@ -278,9 +278,9 @@ function Conversations({
                             )}
 
                             {loading ? (
-                                <p className="text-muted small mb-0">Loading conversations&hellip;</p>
+                                <p className="text-muted text-white small mb-0">Loading conversations&hellip;</p>
                             ) : conversations.length === 0 ? (
-                                <p className="text-muted small mb-0">
+                                <p className="text-muted text-white small mb-0">
                                     No saved conversations yet. Start chatting and your conversation will be saved automatically.
                                 </p>
                             ) : (
@@ -292,7 +292,7 @@ function Conversations({
                                         return (
                                             <div
                                                 key={meta.id}
-                                                className={`list-group-item ${isActive ? 'list-group-item-primary' : ''}`}
+                                                className={`list-group-item ${isActive ? 'list-group-item-primary' : 'text-white'}`}
                                             >
                                                 <div className="d-flex justify-content-between align-items-start gap-2">
                                                     <div className="flex-grow-1 min-w-0">
@@ -350,7 +350,7 @@ function Conversations({
                                                             )}
                                                             <div className="btn-group btn-group-sm" role="group">
                                                                 <button
-                                                                    className="btn btn-outline-primary"
+                                                                    className="btn btn-primary"
                                                                     onClick={() => handleRestore(meta.id)}
                                                                     disabled={isActive}
                                                                     title={isActive ? 'Already active' : 'Open this conversation'}

@@ -683,7 +683,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                             </button>
                         </>
                     )}
-                    <button
+                    {!hasConversationStorage && (<button
                         className="btn btn-sm text-danger m-0"
                         onClick={startNewConversation}
                         title={hasConversationStorage
@@ -691,7 +691,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                             : "Clear conversation"}
                     >
                         <i className="fas fa-eraser"></i>
-                    </button>
+                    </button>)}
                     {hasConversationStorage && conversationMeta.title && (
                         <span
                             className="text-white small text-truncate ms-2 d-none d-md-inline"
