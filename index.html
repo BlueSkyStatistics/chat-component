@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat Component Dev</title>
+    <title>BlueSky Chat Component</title>
   </head>
   <body>
     <div id="chat-container"></div>
@@ -16,9 +16,20 @@
       // Make bootstrap available globally
       window.bootstrap = bootstrap;
       
-      import { initChatComponent } from '/src/main.jsx'
+      import {
+        initChatComponent,
+        LocalStorageProvider,
+        LocalStorageConversationProvider,
+      } from '/src/main.jsx'
       window.addEventListener('DOMContentLoaded', () => {
-        initChatComponent('chat-container')
+        // In dev we explicitly opt in to the bundled storage providers so
+        // the full conversation manager UI is exercised while developing.
+        initChatComponent(
+          'chat-container',
+          new LocalStorageProvider(),
+          new LocalStorageConversationProvider(),
+          (err) => console.error('[dev] conversation storage error:', err),
+        )
       })
     </script>
   </body>

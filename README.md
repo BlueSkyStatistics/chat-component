@@ -19,6 +19,103 @@ npm run build  # for production
 - Streaming responses
 - Copy to clipboard functionality
 - Raw/formatted message view toggle
+- Conversation management (opt-in): store, restore, rename, delete, export and import conversations
+
+## Conversation Management
+
+Conversation management is **opt-in**. When a host app supplies a
+`ConversationStorageInterface` implementation (see below) the chat component
+persists the active conversation, lets users switch between saved ones, delete
+them, and move them between machines via export/import. The conversations
+panel opens from the header's `fa-comments` button.
+
+When no provider is supplied the panel, "New conversation" button and title
+badge are hidden; the eraser button remains and simply resets the current
+in-memory messages.
+
+Features exposed from the panel (when enabled):
+
+- **New conversation**: reset the chat and start a fresh thread. The previous
+  conversation remains stored (also available via the eraser / `+` button in
+  the header).
+- **Open**: restore any saved conversation so you can continue chatting.
+- **Rename**: edit a conversation's title inline.
+- **Delete**: remove a conversation with a confirmation click.
+- **Export**: download a conversation as JSON (per-conversation or "Export All").
+- **Import**: upload a previously-exported JSON file. New ids are generated on
+  import so nothing is overwritten silently.
+
+### Storage
+
+Conversations are stored via a `ConversationStorageInterface`. The library
+ships with a browser-only `LocalStorageConversationProvider`, but
+`initChatComponent` does **not** default it for you — you must explicitly pass
+either the bundled provider or your own implementation to opt in. Electron apps
+can plug in their own provider (e.g. backed by `electron-store` or a local
+database) by implementing the interface:
+
+```javascript
+import {
+  initChatComponent,
+  ConversationStorageInterface,
+  LocalStorageConversationProvider,
+} from '@bluesky/chat';
+
+class MyElectronConversationStorage extends ConversationStorageInterface {
+  async listConversations() { /* ... */ }
+  async getConversation(id) { /* ... */ }
+  async saveConversation(conversation) { /* ... */ }
+  async deleteConversation(id) { /* ... */ }
+  async clearAll() { /* ... */ }
+  async getActiveConversationId() { /* ... */ }
+  async setActiveConversationId(id) { /* ... */ }
+}
+
+// Opt in with your own provider …
+initChatComponent('chat-container', myModelStorage, new MyElectronConversationStorage());
+
+// … or with the bundled localStorage provider (browser only).
+initChatComponent('chat-container', myModelStorage, new LocalStorageConversationProvider());
+
+// Omit the argument entirely to disable the feature.
+initChatComponent('chat-container', myModelStorage);
+```
+
+### Error handling
+
+`initChatComponent` accepts an optional fourth argument, `onConversationError(err)`,
+which is invoked whenever the component fails to read from or write to the
+storage provider (for example a localStorage quota-exceeded error). Use it to
+surface errors in your host UI; when omitted, errors are only logged to the
+console.
+
+### Export format
+
+All exports use the following JSON structure:
+
+```json
+{
+  "format": "bluesky.chat.conversations",
+  "version": 1,
+  "exportedAt": 1700000000000,
+  "conversations": [
+    {
+      "id": "conv-...",
+      "title": "My conversation",
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "version": 1,
+      "messages": [
+        { "id": 1, "role": "user", "content": "Hello", "attachments": [] },
+        { "id": 2, "role": "assistant", "content": "Hi!", "attachments": [] }
+      ]
+    }
+  ]
+}
+```
+
+The importer also accepts a bare conversation object or a bare array of
+conversations, which makes the format easy to produce from other tools.
 
 ## Integration with Electron
 
