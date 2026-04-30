@@ -1,7 +1,9 @@
 import {useEffect, useRef, useState} from 'react'
 import {
     exportAllConversations,
+    exportAllConversationsAsHtml,
     exportConversation,
+    exportConversationAsHtml,
     parseImportedConversations,
 } from './utils/conversationIO'
 
@@ -154,13 +156,29 @@ function Conversations({
         }
     }
 
+    const handleExportOneAsHtml = async (id) => {
+        try {
+            const full = await conversationStorage.getConversation(id)
+            if (!full) return
+            exportConversationAsHtml(full)
+        } catch (err) {
+            reportError(err, 'Failed to export conversation as HTML.')
+        }
+    }
+
+    // Load every saved conversation in full. Shared by both export-all flows
+    // (JSON and HTML) so they stay in sync if storage changes.
+    const loadAllForExport = async () => {
+        const metas = await conversationStorage.listConversations()
+        const fullList = await Promise.all(
+            (metas || []).map((m) => conversationStorage.getConversation(m.id))
+        )
+        return fullList.filter(Boolean)
+    }
+
     const handleExportAll = async () => {
         try {
-            const metas = await conversationStorage.listConversations()
-            const fullList = await Promise.all(
-                (metas || []).map((m) => conversationStorage.getConversation(m.id))
-            )
-            const toExport = fullList.filter(Boolean)
+            const toExport = await loadAllForExport()
             if (toExport.length === 0) {
                 setError('There are no conversations to export.')
                 return
@@ -168,6 +186,19 @@ function Conversations({
             exportAllConversations(toExport)
         } catch (err) {
             reportError(err, 'Failed to export conversations.')
+        }
+    }
+
+    const handleExportAllAsHtml = async () => {
+        try {
+            const toExport = await loadAllForExport()
+            if (toExport.length === 0) {
+                setError('There are no conversations to export.')
+                return
+            }
+            exportAllConversationsAsHtml(toExport)
+        } catch (err) {
+            reportError(err, 'Failed to export conversations as HTML.')
         }
     }
 
@@ -249,8 +280,17 @@ function Conversations({
                                     className="btn btn-secondary btn-sm"
                                     onClick={handleExportAll}
                                     disabled={conversations.length === 0}
+                                    title="Export all conversations as a JSON file"
                                 >
                                     <i className="fas fa-file-export me-1"></i> Export All
+                                </button>
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={handleExportAllAsHtml}
+                                    disabled={conversations.length === 0}
+                                    title="Export all conversations as a self-contained HTML viewer"
+                                >
+                                    <i className="fas fa-file-code me-1"></i> Export All (HTML)
                                 </button>
                                 <input
                                     ref={fileInputRef}
@@ -372,6 +412,13 @@ function Conversations({
                                                                     title="Export as JSON"
                                                                 >
                                                                     <i className="fas fa-file-export"></i>
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-outline-secondary"
+                                                                    onClick={() => handleExportOneAsHtml(meta.id)}
+                                                                    title="Export as HTML"
+                                                                >
+                                                                    <i className="fas fa-file-code"></i>
                                                                 </button>
                                                                 <button
                                                                     className={`btn ${isConfirmingDelete ? 'btn-danger' : 'btn-outline-danger'}`}

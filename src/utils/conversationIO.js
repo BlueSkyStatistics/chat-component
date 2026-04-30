@@ -116,6 +116,306 @@ export const exportAllConversations = (conversations) => {
 };
 
 /**
+ * Trigger an HTML file download in the browser. Mirrors `downloadJson`.
+ */
+export const downloadHtml = (html, filename) => {
+    const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    try {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename || 'conversations.html';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+};
+
+const escapeHtmlAttr = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+// Encode a JSON payload safely so it can be embedded inside an inline
+// `<script type="application/json">` tag without prematurely closing it.
+const encodeJsonForScriptTag = (obj) => JSON.stringify(obj)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+
+/**
+ * Build a self-contained HTML viewer for one or more conversations.
+ *
+ * The returned string is a complete HTML document. When opened in a browser
+ * it shows a sidebar listing every exported conversation and renders the
+ * selected conversation's messages (markdown, code blocks and any embedded
+ * attachments) in the main area. The original export envelope is embedded
+ * verbatim inside a `<script type="application/json">` tag so the file also
+ * works as a portable archive.
+ */
+export const buildConversationsHtml = (conversations) => {
+    const payload = buildExportPayload(conversations);
+    const list = payload.conversations;
+    const docTitle = list.length === 1
+        ? `Conversation: ${list[0].title || 'Untitled'}`
+        : `Conversations (${list.length})`;
+    const exportedAtIso = new Date(payload.exportedAt).toISOString();
+
+    const styles = `
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        color: #1f2328; background: #f6f8fa;
+      }
+      .app { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+      @media (max-width: 720px) { .app { grid-template-columns: 1fr; height: auto; } }
+      .sidebar {
+        border-right: 1px solid #d0d7de; background: #fff; overflow-y: auto;
+        display: flex; flex-direction: column;
+      }
+      .sidebar-header { padding: 16px; border-bottom: 1px solid #d0d7de; }
+      .sidebar-header h1 { font-size: 16px; margin: 0 0 4px; }
+      .sidebar-header .meta { color: #57606a; font-size: 12px; }
+      .conv-list { display: flex; flex-direction: column; }
+      .conv {
+        display: block; padding: 12px 16px; border-bottom: 1px solid #eaeef2;
+        text-decoration: none; color: inherit; cursor: pointer;
+      }
+      .conv:hover { background: #f6f8fa; }
+      .conv-active { background: #ddf4ff !important; }
+      .conv-title { font-weight: 600; font-size: 14px; word-break: break-word; }
+      .conv-meta { color: #57606a; font-size: 12px; margin-top: 2px; }
+      .content { overflow-y: auto; padding: 24px; }
+      .conv-header h2 { margin: 0 0 4px; font-size: 22px; }
+      .conv-sub { color: #57606a; font-size: 13px; margin: 0 0 24px; }
+      .empty { color: #57606a; }
+      .msg {
+        background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+        padding: 12px 16px; margin-bottom: 16px;
+      }
+      .msg-role {
+        font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+        color: #57606a; margin-bottom: 6px; font-weight: 600;
+      }
+      .msg-user { background: #ddf4ff; border-color: #b6e3ff; }
+      .msg-assistant { background: #fff; }
+      .msg-error { background: #ffebe9; border-color: #ffcecb; }
+      .msg-body { line-height: 1.55; word-wrap: break-word; }
+      .msg-body p:first-child { margin-top: 0; }
+      .msg-body p:last-child { margin-bottom: 0; }
+      .msg-body pre {
+        background: #0d1117; color: #e6edf3; padding: 12px; border-radius: 6px;
+        overflow: auto; font-size: 13px;
+      }
+      .msg-body code { background: rgba(175,184,193,.2); padding: 1px 4px; border-radius: 4px; font-size: .9em; }
+      .msg-body pre code { background: transparent; padding: 0; }
+      .msg-body table { border-collapse: collapse; }
+      .msg-body th, .msg-body td { border: 1px solid #d0d7de; padding: 4px 8px; }
+      .atts { margin: 8px 0; }
+      .atts > summary { cursor: pointer; color: #57606a; font-size: 13px; }
+      .att { border: 1px solid #d0d7de; border-radius: 6px; margin-top: 8px; overflow: hidden; }
+      .att-title { padding: 6px 10px; background: #f6f8fa; font-size: 12px; font-weight: 600; border-bottom: 1px solid #d0d7de; }
+      .att-code pre { margin: 0; border-radius: 0; }
+      .att-chart img { max-width: 100%; display: block; }
+      .att-html { padding: 8px; overflow-x: auto; }
+      .att-html table { border-collapse: collapse; }
+      .att-html th, .att-html td { border: 1px solid #d0d7de; padding: 4px 8px; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #0d1117; color: #e6edf3; }
+        .sidebar { background: #161b22; border-color: #30363d; }
+        .sidebar-header, .conv { border-color: #21262d; }
+        .conv:hover { background: #21262d; }
+        .conv-active { background: #1f6feb33 !important; }
+        .conv-meta, .conv-sub, .sidebar-header .meta, .empty { color: #8b949e; }
+        .msg { background: #161b22; border-color: #30363d; }
+        .msg-user { background: #1f6feb22; border-color: #1f6feb55; }
+        .msg-error { background: #f8514922; border-color: #f8514955; }
+        .att { border-color: #30363d; }
+        .att-title { background: #21262d; border-color: #30363d; }
+        .msg-body code { background: rgba(110,118,129,.4); }
+        .msg-body th, .msg-body td, .att-html th, .att-html td { border-color: #30363d; }
+      }
+    `;
+
+    const viewerScript = `
+      (function () {
+        var el = document.getElementById('conversations-data');
+        var raw = el ? el.textContent : '';
+        var data;
+        try { data = JSON.parse(raw); } catch (e) {
+          document.body.innerHTML = '<p style="padding:24px;color:#cf222e">Failed to parse embedded conversation data.</p>';
+          return;
+        }
+        var conversations = (data && Array.isArray(data.conversations)) ? data.conversations : [];
+
+        function escapeHtml(s) {
+          return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function formatDate(ts) {
+          if (!ts) return '';
+          try { return new Date(ts).toLocaleString(); } catch (e) { return ''; }
+        }
+        function renderMarkdown(text) {
+          var t = text == null ? '' : String(text);
+          if (typeof window.marked !== 'undefined' && window.marked && typeof window.marked.parse === 'function') {
+            try { return window.marked.parse(t, { breaks: true, gfm: true }); }
+            catch (e) { /* fall through */ }
+          }
+          return '<pre>' + escapeHtml(t) + '</pre>';
+        }
+        function renderAttachment(att) {
+          var type = (att && att.type) || '';
+          var meta = (att && att.metadata) || {};
+          var title = meta.title || type || 'attachment';
+          var titleHtml = '<div class="att-title">' + escapeHtml(title) + '</div>';
+          if (type === 'code') {
+            var lang = meta.language ? String(meta.language) : '';
+            return '<div class="att att-code">' + titleHtml +
+              '<pre><code class="language-' + escapeHtml(lang) + '">' + escapeHtml(att.data || '') + '</code></pre>' +
+              '</div>';
+          }
+          if (type === 'chart') {
+            return '<div class="att att-chart">' + titleHtml +
+              '<img src="' + escapeHtml(att.data || '') + '" alt="' + escapeHtml(title) + '" />' +
+              '</div>';
+          }
+          if (type === 'table') {
+            // Tables are exported as raw HTML by the chat component; trust the
+            // author's own data here so the table renders as it did in chat.
+            return '<div class="att att-table">' + titleHtml +
+              '<div class="att-html">' + (att.data || '') + '</div>' +
+              '</div>';
+          }
+          return '<div class="att">' + titleHtml + '</div>';
+        }
+        function renderMessage(m) {
+          var role = (m && m.role) || 'assistant';
+          var atts = Array.isArray(m && m.attachments) ? m.attachments : [];
+          var attHtml = '';
+          if (atts.length) {
+            attHtml = '<details class="atts"><summary>' + atts.length + ' attachment' +
+              (atts.length === 1 ? '' : 's') + '</summary>' + atts.map(renderAttachment).join('') + '</details>';
+          }
+          return '<article class="msg msg-' + escapeHtml(role) + '">' +
+            '<header class="msg-role">' + escapeHtml(role) + '</header>' +
+            attHtml +
+            '<div class="msg-body">' + renderMarkdown(m && m.content) + '</div>' +
+            '</article>';
+        }
+        function renderSidebar(activeId) {
+          var sidebar = document.getElementById('conv-list');
+          sidebar.innerHTML = conversations.map(function (c, i) {
+            var msgCount = Array.isArray(c.messages) ? c.messages.length : 0;
+            var id = c.id || ('idx-' + i);
+            return '<a href="#" data-id="' + escapeHtml(id) + '" class="conv' +
+              (id === activeId ? ' conv-active' : '') + '">' +
+              '<div class="conv-title">' + escapeHtml(c.title || 'Untitled') + '</div>' +
+              '<div class="conv-meta">' + msgCount + ' message' + (msgCount === 1 ? '' : 's') +
+              (c.updatedAt ? ' \u00b7 ' + escapeHtml(formatDate(c.updatedAt)) : '') +
+              '</div></a>';
+          }).join('');
+        }
+        function renderContent(c) {
+          var content = document.getElementById('conv-content');
+          if (!c) { content.innerHTML = '<p class="empty">Select a conversation to view it.</p>'; return; }
+          var msgs = Array.isArray(c.messages) ? c.messages : [];
+          content.innerHTML =
+            '<header class="conv-header"><h2>' + escapeHtml(c.title || 'Untitled') + '</h2>' +
+            '<p class="conv-sub">' + msgs.length + ' message' + (msgs.length === 1 ? '' : 's') +
+            (c.updatedAt ? ' \u00b7 updated ' + escapeHtml(formatDate(c.updatedAt)) : '') + '</p></header>' +
+            msgs.map(renderMessage).join('');
+          content.scrollTop = 0;
+        }
+        function selectConversation(id) {
+          var c = null;
+          for (var i = 0; i < conversations.length; i++) {
+            var cid = conversations[i].id || ('idx-' + i);
+            if (cid === id) { c = conversations[i]; break; }
+          }
+          renderSidebar(id);
+          renderContent(c);
+          if (c) {
+            try { history.replaceState(null, '', '#' + encodeURIComponent(c.id || ('idx-' + conversations.indexOf(c)))); }
+            catch (e) { /* ignore */ }
+          }
+        }
+        document.getElementById('conv-list').addEventListener('click', function (e) {
+          var a = e.target && e.target.closest && e.target.closest('a[data-id]');
+          if (!a) return;
+          e.preventDefault();
+          selectConversation(a.getAttribute('data-id'));
+        });
+
+        renderSidebar();
+        var initial = conversations[0];
+        var hash = location.hash ? decodeURIComponent(location.hash.slice(1)) : '';
+        if (hash) {
+          for (var j = 0; j < conversations.length; j++) {
+            var cid2 = conversations[j].id || ('idx-' + j);
+            if (cid2 === hash) { initial = conversations[j]; break; }
+          }
+        }
+        if (initial) selectConversation(initial.id || ('idx-' + conversations.indexOf(initial)));
+        else renderContent(null);
+      })();
+    `;
+
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtmlAttr(docTitle)}</title>
+<!-- Optional markdown rendering. The viewer falls back to a <pre> block when offline. -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>${styles}</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>${escapeHtmlAttr(docTitle)}</h1>
+      <div class="meta">${list.length} conversation${list.length === 1 ? '' : 's'} \u00b7 exported ${escapeHtmlAttr(exportedAtIso)}</div>
+    </div>
+    <nav id="conv-list" class="conv-list" aria-label="Conversations"></nav>
+  </aside>
+  <main id="conv-content" class="content"><p class="empty">Select a conversation to view it.</p></main>
+</div>
+<script id="conversations-data" type="application/json">${encodeJsonForScriptTag(payload)}</script>
+<script>${viewerScript}</script>
+</body>
+</html>
+`;
+};
+
+/**
+ * Export a single conversation as a self-contained HTML viewer.
+ */
+export const exportConversationAsHtml = (conversation) => {
+    const html = buildConversationsHtml([conversation]);
+    const filename = `conversation-${sanitizeFilenamePart(conversation?.title)}.html`;
+    downloadHtml(html, filename);
+};
+
+/**
+ * Export many conversations into a single self-contained HTML viewer.
+ */
+export const exportAllConversationsAsHtml = (conversations) => {
+    const html = buildConversationsHtml(conversations);
+    const filename = `conversations-${new Date().toISOString().slice(0, 10)}.html`;
+    downloadHtml(html, filename);
+};
+
+/**
  * Validate+normalize raw JSON text that a user is importing.
  * Accepts several shapes (see module header) and always returns an array of
  * fresh conversation objects ready for saving. New ids are generated so an

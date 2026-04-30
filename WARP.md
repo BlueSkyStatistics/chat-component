@@ -105,6 +105,12 @@ ConversationStorageInterface (abstract)
 ```
 The import parser also accepts a single conversation object or a bare array of conversations. Imported conversations always get fresh ids so existing ones are never overwritten silently.
 
+**HTML export (read-only viewer):**
+- `buildConversationsHtml(conversations)` / `exportConversationAsHtml(c)` / `exportAllConversationsAsHtml(list)` produce a single self-contained `.html` file users can open directly in a browser to browse a sidebar of conversations and read each one (markdown, code blocks and attachments included).
+- The same JSON envelope above is embedded verbatim inside a `<script id="conversations-data" type="application/json">` tag in the generated HTML, so the file doubles as a portable archive.
+- Markdown is rendered via `marked` loaded from a CDN, with a graceful `<pre>` fallback when the page is opened offline. The viewer has no other runtime dependencies.
+- HTML export is read-only: the importer in `parseImportedConversations` still expects JSON. Re-importing requires extracting the embedded JSON or exporting as JSON in the first place.
+
 ### Template System
 
 **Two-tier template mechanism:**
