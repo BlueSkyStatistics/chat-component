@@ -92,9 +92,9 @@ function Conversations({
         return () => window.removeEventListener('keydown', handler)
     }, [onClose])
 
-    const handleRestore = async (id) => {
+    const handleRestore = async (id, close = true) => {
         if (onRestore) await onRestore(id)
-        onClose()
+        close && onClose()
     }
 
     const handleNew = async () => {
@@ -278,9 +278,9 @@ function Conversations({
                             )}
 
                             {loading ? (
-                                <p className="text-muted text-white small mb-0">Loading conversations&hellip;</p>
+                                <p className="text-muted small mb-0">Loading conversations&hellip;</p>
                             ) : conversations.length === 0 ? (
-                                <p className="text-muted text-white small mb-0">
+                                <p className="text-muted small mb-0">
                                     No saved conversations yet. Start chatting and your conversation will be saved automatically.
                                 </p>
                             ) : (
@@ -290,9 +290,11 @@ function Conversations({
                                         const isRenaming = renamingId === meta.id
                                         const isConfirmingDelete = confirmDeleteId === meta.id
                                         return (
-                                            <div
+                                            <a
                                                 key={meta.id}
-                                                className={`list-group-item ${isActive ? 'list-group-item-primary' : 'text-white'}`}
+                                                className={`list-group-item list-group-item-action ${isActive ? 'list-group-item-primary' : ''}`}
+                                                href={'#'}
+                                                onClick={(e) => e.preventDefault() || handleRestore(meta.id, false)}
                                             >
                                                 <div className="d-flex justify-content-between align-items-start gap-2">
                                                     <div className="flex-grow-1 min-w-0">
@@ -349,14 +351,14 @@ function Conversations({
                                                                 </span>
                                                             )}
                                                             <div className="btn-group btn-group-sm" role="group">
-                                                                <button
-                                                                    className="btn btn-primary"
-                                                                    onClick={() => handleRestore(meta.id)}
-                                                                    disabled={isActive}
-                                                                    title={isActive ? 'Already active' : 'Open this conversation'}
-                                                                >
-                                                                    <i className="fas fa-folder-open"></i>
-                                                                </button>
+                                                                {/*<button*/}
+                                                                {/*    className="btn btn-primary"*/}
+                                                                {/*    onClick={() => handleRestore(meta.id)}*/}
+                                                                {/*    disabled={isActive}*/}
+                                                                {/*    title={isActive ? 'Already active' : 'Open this conversation'}*/}
+                                                                {/*>*/}
+                                                                {/*    <i className="fas fa-folder-open"></i>*/}
+                                                                {/*</button>*/}
                                                                 <button
                                                                     className="btn btn-outline-secondary"
                                                                     onClick={() => beginRename(meta)}
@@ -373,9 +375,9 @@ function Conversations({
                                                                 </button>
                                                                 <button
                                                                     className={`btn ${isConfirmingDelete ? 'btn-danger' : 'btn-outline-danger'}`}
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
                                                                         if (isConfirmingDelete) {
-                                                                            handleDelete(meta.id)
+                                                                            await handleDelete(meta.id)
                                                                         } else {
                                                                             setConfirmDeleteId(meta.id)
                                                                         }
@@ -389,7 +391,7 @@ function Conversations({
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
+                                            </a>
                                         )
                                     })}
                                 </div>

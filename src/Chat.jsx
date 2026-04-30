@@ -668,14 +668,14 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                     {hasConversationStorage && (
                         <>
                             <button
-                                className="btn btn-sm btn-link text-white p-1 m-0"
+                                className="btn btn-sm btn-link p-1 m-0"
                                 onClick={() => setShowConversations(true)}
                                 title="Conversations"
                             >
                                 <i className="fas fa-comments"></i>
                             </button>
                             <button
-                                className="btn btn-sm btn-link text-white p-1 m-0"
+                                className="btn btn-sm btn-link p-1 m-0"
                                 onClick={startNewConversation}
                                 title="New conversation"
                             >
@@ -694,7 +694,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                     </button>)}
                     {hasConversationStorage && conversationMeta.title && (
                         <span
-                            className="text-white small text-truncate ms-2 d-none d-md-inline"
+                            className="small text-truncate ms-2 d-none d-md-inline"
                             style={{maxWidth: '220px'}}
                             title={conversationMeta.title}
                         >
@@ -705,7 +705,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
 
                 <div className="d-flex align-items-center gap-2">
                     {selectedModel && (
-                        <span className="text-white">
+                        <span className="">
                             {selectedModel.name}
                         </span>
                     )}
@@ -717,7 +717,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                             aria-expanded="false"
                             title="Settings"
                         >
-                            <i className="fas fa-cog text-white"></i>
+                            <i className="fas fa-cog"></i>
                         </button>
                         <div className="dropdown-menu dropdown-menu-end" style={{minWidth: '250px'}}>
                             <div className="px-3 py-2">
