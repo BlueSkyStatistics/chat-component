@@ -411,7 +411,7 @@ function Conversations({
                                                                 <div className="text-muted small">
                                                                     {meta.messageCount ?? 0} message{meta.messageCount === 1 ? '' : 's'}
                                                                     {meta.updatedAt ? ` \u00b7 updated ${formatDateTime(meta.updatedAt)}` : ''}
-                                                                    {meta.size ? ` \u00b7 updated ${formatFileSize(meta.size)}` : ''}
+                                                                    {meta.size ? ` \u00b7 ${formatFileSize(meta.size)}` : ''}
                                                                 </div>
                                                             </>
                                                         )}
