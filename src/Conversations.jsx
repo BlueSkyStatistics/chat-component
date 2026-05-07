@@ -15,6 +15,36 @@ const formatDateTime = (ts) => {
         return ''
     }
 }
+/**
+ * Format bytes as human-readable text.
+ *
+ * @param bytes Number of bytes.
+ * @param si True to use metric (SI) units, aka powers of 1000. False to use
+ *           binary (IEC), aka powers of 1024.
+ * @param dp Number of decimal places to display.
+ *
+ * @return Formatted string.
+ */
+const formatFileSize = (bytes, si = false, dp = 1) => {
+    const thresh = si ? 1000 : 1024;
+
+    if (Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+
+    const units = si
+        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    let u = -1;
+    const r = 10 ** dp;
+
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+
+    return bytes.toFixed(dp) + ' ' + units[u];
+}
 
 /**
  * Conversation manager modal.
@@ -33,15 +63,15 @@ const formatDateTime = (ts) => {
  *      the chat component so host apps can surface it in their own UI
  */
 function Conversations({
-    conversationStorage,
-    activeConversationId,
-    onRestore,
-    onNew,
-    onClose,
-    onActiveConversationDeleted,
-    onActiveConversationChanged,
-    onStorageError,
-}) {
+                           conversationStorage,
+                           activeConversationId,
+                           onRestore,
+                           onNew,
+                           onClose,
+                           onActiveConversationDeleted,
+                           onActiveConversationChanged,
+                           onStorageError,
+                       }) {
     const [conversations, setConversations] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -321,7 +351,8 @@ function Conversations({
                                 <p className="text-muted small mb-0">Loading conversations&hellip;</p>
                             ) : conversations.length === 0 ? (
                                 <p className="text-muted small mb-0">
-                                    No saved conversations yet. Start chatting and your conversation will be saved automatically.
+                                    No saved conversations yet. Start chatting and your conversation will be saved
+                                    automatically.
                                 </p>
                             ) : (
                                 <div className="list-group">
@@ -368,7 +399,8 @@ function Conversations({
                                                             </div>
                                                         ) : (
                                                             <>
-                                                                <div className="fw-semibold text-truncate" title={meta.title}>
+                                                                <div className="fw-semibold text-truncate"
+                                                                     title={meta.title}>
                                                                     {isActive && (
                                                                         <span className="badge bg-primary me-2">
                                                                             Active
@@ -379,6 +411,7 @@ function Conversations({
                                                                 <div className="text-muted small">
                                                                     {meta.messageCount ?? 0} message{meta.messageCount === 1 ? '' : 's'}
                                                                     {meta.updatedAt ? ` \u00b7 updated ${formatDateTime(meta.updatedAt)}` : ''}
+                                                                    {meta.size ? ` \u00b7 ${formatFileSize(meta.size)}` : ''}
                                                                 </div>
                                                             </>
                                                         )}
@@ -391,14 +424,6 @@ function Conversations({
                                                                 </span>
                                                             )}
                                                             <div className="btn-group btn-group-sm" role="group">
-                                                                {/*<button*/}
-                                                                {/*    className="btn btn-primary"*/}
-                                                                {/*    onClick={() => handleRestore(meta.id)}*/}
-                                                                {/*    disabled={isActive}*/}
-                                                                {/*    title={isActive ? 'Already active' : 'Open this conversation'}*/}
-                                                                {/*>*/}
-                                                                {/*    <i className="fas fa-folder-open"></i>*/}
-                                                                {/*</button>*/}
                                                                 <button
                                                                     className="btn btn-outline-secondary"
                                                                     onClick={() => beginRename(meta)}
