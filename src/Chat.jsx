@@ -35,6 +35,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
     const [showSettings, setShowSettings] = useState(false)
     const [showConversations, setShowConversations] = useState(false)
     const [models, setModels] = useState([])
+    const [addModelFormVisible, setAddModelFormVisible] = useState(window.chatCustomModelsAllowed ?? true)
     const [selectedModel, setSelectedModel] = useState(null)
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
@@ -52,6 +53,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
     const inputRef = useRef(null)
     const autosaveTimerRef = useRef(null)
     const conversationHydratedRef = useRef(false)
+
 
     // Handle scroll events to determine if we should auto-scroll
     const handleScroll = () => {
@@ -198,6 +200,15 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
 
         return () => {
             window.removeEventListener('outputElement', outputHandler);
+        };
+    }, [])
+
+    useEffect(() => {
+        const addModelFormHandler = (e) => {setAddModelFormVisible(Boolean(e.detail))};
+        window.addEventListener('chatSetAddModelFormVisible', addModelFormHandler);
+
+        return () => {
+            window.removeEventListener('chatSetAddModelFormVisible', addModelFormHandler);
         };
     }, [])
 
@@ -831,6 +842,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                     models={models}
                     onSave={handleSaveSettings}
                     onClose={() => setShowSettings(false)}
+                    addModelFormVisible={addModelFormVisible}
                 />
             )}
             {hasConversationStorage && showConversations && (
