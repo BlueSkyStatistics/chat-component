@@ -27,7 +27,7 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
-function Chat({modelStorage, conversationStorage, onConversationError}) {
+function Chat({modelStorage, conversationStorage, onConversationError, options}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
     const [messages, setMessages] = useState(() => [makeGreetingMessage()])
@@ -35,7 +35,6 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
     const [showSettings, setShowSettings] = useState(false)
     const [showConversations, setShowConversations] = useState(false)
     const [models, setModels] = useState([])
-    const [addModelFormVisible, setAddModelFormVisible] = useState(window.chatCustomModelsAllowed ?? true)
     const [selectedModel, setSelectedModel] = useState(null)
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
@@ -203,14 +202,6 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
         };
     }, [])
 
-    useEffect(() => {
-        const addModelFormHandler = (e) => {setAddModelFormVisible(Boolean(e.detail))};
-        window.addEventListener('chatSetAddModelFormVisible', addModelFormHandler);
-
-        return () => {
-            window.removeEventListener('chatSetAddModelFormVisible', addModelFormHandler);
-        };
-    }, [])
 
     const copyToClipboard = async (text) => {
         try {
@@ -842,7 +833,7 @@ function Chat({modelStorage, conversationStorage, onConversationError}) {
                     models={models}
                     onSave={handleSaveSettings}
                     onClose={() => setShowSettings(false)}
-                    addModelFormVisible={addModelFormVisible}
+                    addModelFormVisible={options.addModelsAllowed}
                 />
             )}
             {hasConversationStorage && showConversations && (

@@ -25,7 +25,7 @@ let root = null;
 //                           the storage provider (e.g. localStorage quota
 //                           exceeded). Useful for surfacing the error in the
 //                           host application's UI.
-function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError) {
+function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
@@ -39,6 +39,7 @@ function initChatComponent(containerId, modelStorage, conversationStorage, onCon
           modelStorage={modelStorageProvider}
           conversationStorage={conversationStorage}
           onConversationError={onConversationError}
+          options={options}
         />
       </React.StrictMode>
     );
