@@ -177,10 +177,17 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
                 
                 const newAttachments = [...prev, attachment];
                 
-                // Set default message if first attachment and input is empty
-                if (attachment.initialMessage && prev.length === 0 && !inputValue.trim()) {
-                    setInputValue(attachment.initialMessage);
-                    setTimeout(() => inputRef.current?.focus(), 0);
+                // Set default message if first attachment and input is empty.
+                // Use the functional updater to read the *current* input value —
+                // this effect's closure captures a stale inputValue (empty deps).
+                if (attachment.initialMessage && prev.length === 0) {
+                    setInputValue(current => {
+                        if (current.trim()) {
+                            return current;
+                        }
+                        setTimeout(() => inputRef.current?.focus(), 0);
+                        return attachment.initialMessage;
+                    });
                 }
                 
                 return newAttachments;
@@ -203,17 +210,21 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
     }, [])
 
 
-    const copyToClipboard = async (text) => {
+    // These handlers are passed to the memoized <Message> list. They must keep
+    // stable references (useCallback) and avoid closing over `messages` (use
+    // functional updaters) so that re-rendering <Chat> on every keystroke does
+    // not invalidate every message's props and force a full re-render.
+    const copyToClipboard = useCallback(async (text) => {
         try {
             await navigator.clipboard.writeText(text)
         } catch (err) {
             console.error('Failed to copy text: ', err)
         }
-    }
+    }, [])
 
-    const deleteMessage = (messageId) => {
-        setMessages(messages.filter(msg => msg.id !== messageId))
-    }
+    const deleteMessage = useCallback((messageId) => {
+        setMessages(prev => prev.filter(msg => msg.id !== messageId))
+    }, [])
 
     // Cancel any in-flight streaming without mutating the message list.
     // Used when switching/clearing a conversation so the old assistant response
@@ -414,21 +425,21 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
         }))
     }, [])
 
-    const toggleMessageView = (messageId) => {
-        setMessages(messages.map(msg =>
+    const toggleMessageView = useCallback((messageId) => {
+        setMessages(prev => prev.map(msg =>
             msg.id === messageId ? {...msg, showRaw: !msg.showRaw} : msg
         ))
-    }
+    }, [])
 
     // Helper functions for attachments
-    const getIconForType = (type) => {
+    const getIconForType = useCallback((type) => {
         switch(type) {
             case 'code': return 'code';
             case 'chart': return 'chart-bar';
             case 'table': return 'table';
             default: return 'file';
         }
-    }
+    }, [])
 
 
     const removeAttachment = (attachmentId) => {
@@ -453,13 +464,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
         });
     }
 
-    const toggleMessageAttachments = (messageId) => {
-        setMessages(messages.map(msg =>
+    const toggleMessageAttachments = useCallback((messageId) => {
+        setMessages(prev => prev.map(msg =>
             msg.id === messageId
                 ? { ...msg, showAttachments: !msg.showAttachments }
                 : msg
         ))
-    }
+    }, [])
 
     // Set up scroll event listener
     useEffect(() => {
@@ -592,8 +603,16 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
                             if (data.choices[0]?.delta?.content) {
                                 accumulatedResponse += data.choices[0].delta.content
                                 setMessages(prev => {
+                                    // Replace the last message with a *new*
+                                    // object (don't mutate in place) so the
+                                    // memoized <Message> sees a changed prop
+                                    // and re-renders the streamed content.
                                     const newMessages = [...prev]
-                                    newMessages[newMessages.length - 1].content = accumulatedResponse
+                                    const last = newMessages.length - 1
+                                    newMessages[last] = {
+                                        ...newMessages[last],
+                                        content: accumulatedResponse,
+                                    }
                                     return newMessages
                                 })
                             }

@@ -5,7 +5,7 @@ import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import MessageAttachments from './MessageAttachments'
 import {preserveLatexEscapes} from '../utils/preserveLatexEscapes'
-import {useEffect, useMemo, useRef} from "react";
+import {memo, useEffect, useMemo, useRef} from "react";
 
 // Delimiter pairs recognized by KaTeX auto-render. Order matters: longer /
 // more specific delimiters (e.g. `$$`) must come before shorter ones (`$`).
@@ -166,4 +166,11 @@ function Message({
     )
 }
 
-export default Message
+// Memoized so a re-render of the parent <Chat> (e.g. on every keystroke in the
+// input box) does not re-run the expensive markdown / syntax-highlight / KaTeX
+// work for messages whose content has not changed. This is the primary fix for
+// per-keystroke lag that grows with conversation length. For this to actually
+// skip work, the parent must pass referentially stable props: memoized
+// callbacks (useCallback) and a *new* message object whenever its content
+// changes (see the streaming updater in Chat).
+export default memo(Message)
