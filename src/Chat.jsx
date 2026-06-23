@@ -27,7 +27,7 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
-function Chat({modelStorage, conversationStorage, onConversationError, options}) {
+function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
     const [messages, setMessages] = useState(() => [makeGreetingMessage()])
@@ -545,64 +545,19 @@ function Chat({modelStorage, conversationStorage, onConversationError, options})
         abortControllerRef.current = new AbortController()
         setIsStreaming(true)
 
-        try {
-            const response = await fetch(selectedModel.endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(selectedModel.apiKey && {'Authorization': `Bearer ${selectedModel.apiKey}`})
-                },
-                body: JSON.stringify({
-                    messages: newMessages
-                        .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role))
-                        .map(formatMessage),
-                    stream: true,
-                    model: selectedModel.name
-                }),
-                signal: abortControllerRef.current.signal
+        const preparedMessages = newMessages
+            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role))
+            .map(formatMessage)
+        const onUpdateStreamingMessage = accumulatedResponse => {
+            setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[newMessages.length - 1].content = accumulatedResponse
+                return newMessages
             })
+        }
 
-            if (!response.ok) {
-                let errorData;
-                try {
-                    errorData = await response.json()
-                    errorData = errorData.error
-                } catch (e) {
-                    throw new Error(`HTTP error! status: ${response.status}`)
-                }
-                throw new Error(`HTTP error! type: ${errorData.type}\nmessage: ${errorData.message}`)
-
-            }
-
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-            let accumulatedResponse = ''
-
-            while (true) {
-                const {done, value} = await reader.read()
-                if (done) break
-
-                const chunk = decoder.decode(value)
-                const lines = chunk.split('\n')
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-                        try {
-                            const data = JSON.parse(line.slice(6))
-                            if (data.choices[0]?.delta?.content) {
-                                accumulatedResponse += data.choices[0].delta.content
-                                setMessages(prev => {
-                                    const newMessages = [...prev]
-                                    newMessages[newMessages.length - 1].content = accumulatedResponse
-                                    return newMessages
-                                })
-                            }
-                        } catch (e) {
-                            console.error('Error parsing streaming response:', e)
-                        }
-                    }
-                }
-            }
+        try {
+            await messageStreamingHandler(preparedMessages, onUpdateStreamingMessage, selectedModel, abortControllerRef.current.signal)
         } catch (error) {
             if (error.name === 'AbortError') {
                 return // Normal abort, do nothing
