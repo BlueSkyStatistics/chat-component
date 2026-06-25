@@ -6,6 +6,7 @@ import {
   ConversationStorageInterface,
   LocalStorageConversationProvider,
 } from './storage/conversationStorage'
+import {apiCallStreaming} from "./utils/streamingHelpers.js";
 
 // Store the root instance
 let root = null;
@@ -25,7 +26,7 @@ let root = null;
 //                           the storage provider (e.g. localStorage quota
 //                           exceeded). Useful for surfacing the error in the
 //                           host application's UI.
-function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}) {
+function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}, messageStreamingHandler = apiCallStreaming) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
@@ -40,6 +41,7 @@ function initChatComponent(containerId, modelStorage, conversationStorage, onCon
           conversationStorage={conversationStorage}
           onConversationError={onConversationError}
           options={options}
+          messageStreamingHandler={messageStreamingHandler}
         />
       </React.StrictMode>
     );
