@@ -1,15 +1,18 @@
-import {useEffect} from 'react'
+import {useEffect, useState} from 'react'
 import PendingAttachmentItem from './PendingAttachmentItem'
 
-function PendingAttachments({ 
-    attachments, 
+function PendingAttachments({
+    attachments,
     expandedAttachments,
     onToggleExpand,
     onRemoveAttachment,
     onRemoveGroup,
+    onRemoveAll,
     onCopy,
-    getIconForType 
+    getIconForType
 }) {
+    const [confirmingClearAll, setConfirmingClearAll] = useState(false)
+
     const groupAttachmentsByOutput = (attachments) => {
         return attachments.reduce((groups, attachment) => {
             const outputId = attachment.output?.id || 'ungrouped'
@@ -51,9 +54,47 @@ function PendingAttachments({
     if (attachments.length === 0) return null
 
     const groupedAttachments = groupAttachmentsByOutput(attachments)
+    const groupCount = Object.keys(groupedAttachments).length
 
     return (
         <div className="pending-attachments-wrapper p-2 border-top bg-light">
+            <div className="d-flex align-items-center justify-content-between mb-1 px-1">
+                <small className="text-muted fw-bold">
+                    Attachments <span className="fw-normal">&middot; {attachments.length}</span>
+                </small>
+                {confirmingClearAll ? (
+                    <div className="d-flex align-items-center gap-2 clear-all-confirm">
+                        <small className="text-muted">Clear {groupCount} group{groupCount === 1 ? '' : 's'}?</small>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-link p-0"
+                            onClick={() => setConfirmingClearAll(false)}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-link text-danger p-0"
+                            onClick={() => {
+                                onRemoveAll()
+                                setConfirmingClearAll(false)
+                            }}
+                        >
+                            Clear all
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        className="btn btn-sm btn-link text-danger p-0 clear-all-btn"
+                        onClick={() => setConfirmingClearAll(true)}
+                        title="Clear all attachments"
+                    >
+                        <i className="fas fa-trash fa-sm me-1"></i>
+                        Clear all
+                    </button>
+                )}
+            </div>
             <div className="accordion accordion-flush" id="attachmentAccordion">
                 {Object.entries(groupedAttachments).map(([outputId, group]) => (
                     <div className="accordion-item" key={outputId}>

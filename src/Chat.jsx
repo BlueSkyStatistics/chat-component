@@ -436,9 +436,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     }
 
     const removeOutputGroup = (outputId) => {
-        setPendingAttachments(prev => 
+        setPendingAttachments(prev =>
             prev.filter(a => (a.output?.id || 'ungrouped') !== outputId)
         );
+    }
+
+    const clearAllAttachments = () => {
+        setPendingAttachments([]);
     }
 
     const toggleAttachmentExpanded = (attachmentId) => {
@@ -736,6 +740,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     onToggleExpand={toggleAttachmentExpanded}
                     onRemoveAttachment={removeAttachment}
                     onRemoveGroup={removeOutputGroup}
+                    onRemoveAll={clearAllAttachments}
                     onCopy={copyToClipboard}
                     getIconForType={getIconForType}
                 />
