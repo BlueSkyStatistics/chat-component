@@ -32,6 +32,19 @@ export const setTemplate = (type, template) => {
         window.attachmentTemplates[type] = template;
     }
 };
+/**
+ * Gets the optional system message preloaded from attachmentTemplates/system.template.
+ * The value can also be overridden at runtime through window.attachmentTemplates.system.
+ * @returns {string} System message content, or an empty string when it is not configured
+ */
+export const getSystemMessage = () => {
+    const template = typeof window !== 'undefined'
+        ? window.attachmentTemplates?.system
+        : null;
+    const value = typeof template === 'function' ? template() : template;
+
+    return typeof value === 'string' ? value : '';
+};
 
 const applyTemplate = (template, data, metadata = {}) => {
     let result = template;

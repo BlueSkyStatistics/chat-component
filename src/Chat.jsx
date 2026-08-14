@@ -1,5 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react'
-import {formatMessage} from './attachmentFormatters'
+import {formatMessage, getSystemMessage} from './attachmentFormatters'
 import 'katex/dist/katex.min.css'
 import './Chat.css'
 import Settings from './Settings'
@@ -549,9 +549,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         abortControllerRef.current = new AbortController()
         setIsStreaming(true)
 
-        const preparedMessages = newMessages
+        const systemMessage = getSystemMessage()
+        const preparedMessages = [
+            ...(systemMessage.trim() ? [{role: 'system', content: systemMessage}] : []),
+            ...newMessages
             .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role))
             .map(formatMessage)
+        ]
         const onUpdateStreamingMessage = accumulatedResponse => {
             setMessages(prev => {
                 const newMessages = [...prev]

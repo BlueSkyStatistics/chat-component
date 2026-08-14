@@ -163,6 +163,16 @@ interface OutputElement {
 ### Custom Output Templates
 
 The chat component supports customizable templates for each type of output attachment. You can provide your own templates to customize how different types of attachments are rendered in the chat.
+### System Message
+
+To include a system message in every model request, put its content in
+`attachmentTemplates/system.template` before building the library. The file is
+preloaded with the other templates; when it is empty (the default), no system
+message is sent. It is added only to the outbound API message list, so it is
+not rendered in the UI or saved with conversations.
+
+For a runtime override, assign a string (or a function returning one) to
+`window.attachmentTemplates.system`.
 
 #### Setting Up Custom Templates
 

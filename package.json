@@ -23,21 +23,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "katex": "^0.16.45",
+    "katex": "^0.18.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-markdown": "^10.1.0",
-    "react-syntax-highlighter": "^15.6.6",
+    "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@fortawesome/fontawesome-free": "^7.1.0",
+    "@fortawesome/fontawesome-free": "^7.3.1",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@vitejs/plugin-react": "^5.0.2",
+    "@vitejs/plugin-react": "^6.0.5",
     "bootstrap": "^5.3.8",
-    "electron": "^42.0.0",
-    "vite": "^7.3.3",
-    "vite-plugin-static-copy": "^3.1.4"
+    "electron": "^43.4.0",
+    "vite": "^8.2.1",
+    "vite-plugin-static-copy": "^4.1.1"
   }
 }
