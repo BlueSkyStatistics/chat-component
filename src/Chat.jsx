@@ -7,8 +7,14 @@ import Conversations from './Conversations'
 import Message from './components/Message'
 import PendingAttachments from './components/PendingAttachments'
 import {deriveConversationTitle, makeConversationId} from './utils/conversationIO'
+import {
+    getRuntimeModel,
+    getSelectedModelId,
+    makeLegacyModelId,
+    migrateModelConfiguration,
+} from './utils/modelConfig'
 
-const makeModelId = (model) => `${model.name}-${model.endpoint}`;
+const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
 const DEFAULT_TITLE = 'New Conversation'
 const AUTOSAVE_DEBOUNCE_MS = 500
@@ -35,6 +41,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     const [showSettings, setShowSettings] = useState(false)
     const [showConversations, setShowConversations] = useState(false)
     const [models, setModels] = useState([])
+    const [credentials, setCredentials] = useState([])
     const [selectedModel, setSelectedModel] = useState(null)
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
@@ -113,29 +120,33 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     }, [messages])
 
     const refreshModels = useCallback(async () => {
-        const savedModels = await storageProviderRef.current.getModels();
-        const savedModelId = await storageProviderRef.current.getSelectedModel();
+        const provider = storageProviderRef.current
+        const [savedModels, savedModelId, savedCredentials] = await Promise.all([
+            provider.getModels(),
+            provider.getSelectedModel(),
+            typeof provider.getCredentials === 'function' ? provider.getCredentials() : [],
+        ])
+        const migrated = migrateModelConfiguration(savedModels, savedCredentials)
 
-        setModels(savedModels || []);
-        if (savedModels && savedModels.length > 0) {
-            let next = savedModels[0];
-            if (savedModelId) {
-                const found = savedModels.find(m => makeModelId(m) === savedModelId);
-                if (found) next = found;
+        if (migrated.changed) {
+            await provider.saveModels(migrated.models)
+            if (typeof provider.saveCredentials === 'function') {
+                await provider.saveCredentials(migrated.credentials)
             }
-            setSelectedModel(next);
-            await storageProviderRef.current.saveSelectedModel(makeModelId(next));
-        } else {
-            setSelectedModel(null);
-            await storageProviderRef.current.saveSelectedModel(null);
         }
+
+        setModels(migrated.models)
+        setCredentials(migrated.credentials)
+        const selectedId = getSelectedModelId(migrated.models, savedModelId)
+        const next = migrated.models.find((model) => model.id === selectedId) || null
+        setSelectedModel(next)
+        await provider.saveSelectedModel(selectedId)
     }, []);
 
     // Save selected model when it changes
     useEffect(() => {
         if (selectedModel) {
-            const modelId = makeModelId(selectedModel);
-            storageProviderRef.current.saveSelectedModel(modelId);
+            storageProviderRef.current.saveSelectedModel(makeModelId(selectedModel));
         }
     }, [selectedModel]);
 
@@ -565,7 +576,16 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         }
 
         try {
-            await messageStreamingHandler(preparedMessages, onUpdateStreamingMessage, selectedModel, abortControllerRef.current.signal)
+            const selectedCredential = credentials.find(
+                (credential) => credential.id === selectedModel.credentialId
+            )
+            const runtimeModel = getRuntimeModel(selectedModel, selectedCredential)
+            await messageStreamingHandler(
+                preparedMessages,
+                onUpdateStreamingMessage,
+                runtimeModel,
+                abortControllerRef.current.signal
+            )
         } catch (error) {
             if (error.name === 'AbortError') {
                 return // Normal abort, do nothing
@@ -596,8 +616,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         await refreshModels();
     }
 
-    const handleSaveSettings = async (newModels) => {
+    const handleSaveSettings = async (newModels, newCredentials) => {
+        if (typeof storageProviderRef.current.saveCredentials !== 'function') {
+            throw new Error('The configured model storage provider must implement saveCredentials(credentials).')
+        }
         setModels(newModels);
+        setCredentials(newCredentials);
+        await storageProviderRef.current.saveCredentials(newCredentials);
         await storageProviderRef.current.saveModels(newModels);
 
         // Handle selected model when models list changes
@@ -795,6 +820,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             {showSettings && (
                 <Settings
                     models={models}
+                    credentials={credentials}
                     onSave={handleSaveSettings}
                     onClose={() => setShowSettings(false)}
                     addModelFormVisible={options.addModelsAllowed}

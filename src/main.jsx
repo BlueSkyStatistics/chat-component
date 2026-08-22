@@ -6,7 +6,7 @@ import {
   ConversationStorageInterface,
   LocalStorageConversationProvider,
 } from './storage/conversationStorage'
-import {apiCallStreaming} from "./utils/streamingHelpers.js";
+import {providerStreaming} from "./utils/streamingHandlers/providerStreaming.js";
 
 // Store the root instance
 let root = null;
@@ -26,7 +26,12 @@ let root = null;
 //                           the storage provider (e.g. localStorage quota
 //                           exceeded). Useful for surfacing the error in the
 //                           host application's UI.
-function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}, messageStreamingHandler = apiCallStreaming) {
+//   options               - optional UI settings. `addModelsAllowed` defaults
+//                           to true and controls credential/model mutations.
+//   messageStreamingHandler - optional custom handler. It receives a resolved
+//                           runtime model with legacy endpoint/apiKey fields
+//                           where applicable plus its `credential` metadata.
+function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}, messageStreamingHandler = providerStreaming) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {

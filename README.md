@@ -20,6 +20,58 @@ npm run build  # for production
 - Copy to clipboard functionality
 - Raw/formatted message view toggle
 - Conversation management (opt-in): store, restore, rename, delete, export and import conversations
+## Model Credentials and Configuration
+
+Models are configured independently from credentials. A model has a stable ID,
+a name, and a `credentialId`; the settings dialog groups all models beneath
+their credential profile. Removing a credential also removes its attached
+non-external models.
+
+The settings dialog offers three credential types:
+
+- **OpenAI**: API key with `https://api.openai.com/v1/models` preconfigured
+  for optional model listing. The endpoint is the standard Chat Completions
+  URL.
+- **Azure OpenAI**: client ID, tenant ID, resource name, comma-separated chat
+  scopes, chat API version, optional deployment-list URL, and separate
+  deployment-list scopes. Model names must be Azure *deployment* names.
+- **Manual**: Chat Completions-compatible endpoint URL, optional API key, and
+  optional model-list URL.
+
+Select a credential while adding models, type one or more comma-separated
+names, and choose **Add Models**. If that credential enables listing, **List
+models** fetches the configured URL and presents a multi-select list; selected
+values are appended to the editable input. Model-list endpoints must return an
+OpenAI-compatible `{ "data": [{ "id": "..." }] }` response, except Azure
+deployment-list endpoints, which may return Azure Resource Manager
+`{ "value": [{ "name": "..." }] }` responses.
+
+Azure uses `@azure/msal-browser` with an interactive popup in the renderer and
+caches tokens in browser local storage. Register the renderer origin as an
+allowed redirect URI for the Azure application, assign the user a suitable
+Azure role, and ensure Electron permits popup-based sign-in. No direct
+`electron` import or Node integration is required.
+
+### Model Storage
+
+`ModelStorageInterface` has two additional async methods:
+
+```javascript
+async getCredentials() { /* return credential records */ }
+async saveCredentials(credentials) { /* persist credential records */ }
+```
+
+Custom storage providers must implement both methods to support credential
+editing. The bundled `LocalStorageProvider` stores models under `aiModels`,
+credentials under `aiModelCredentials`, and selection under `selectedModel`.
+Existing standalone `{name, endpoint, apiKey}` model records are migrated on
+first load into manual credential records and linked models. Legacy selected
+model identifiers remain resolvable during this migration.
+
+Custom `messageStreamingHandler` callbacks retain their existing four
+arguments. Their third argument is now a resolved runtime model: manual and
+OpenAI models include `endpoint` and `apiKey`, while every linked model also
+includes `credential` metadata.
 
 ## Conversation Management
 
