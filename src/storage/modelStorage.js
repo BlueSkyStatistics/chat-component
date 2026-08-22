@@ -15,6 +15,14 @@ export class ModelStorageInterface {
     async saveSelectedModel(modelName) {
         throw new Error('Not implemented');
     }
+
+    async getCredentials() {
+        throw new Error('Not implemented');
+    }
+
+    async saveCredentials(credentials) {
+        throw new Error('Not implemented');
+    }
 }
 
 // Local Storage Implementation
@@ -34,6 +42,15 @@ export class LocalStorageProvider extends ModelStorageInterface {
 
     async saveSelectedModel(modelName) {
         localStorage.setItem('selectedModel', modelName);
+    }
+
+    async getCredentials() {
+        const savedCredentials = localStorage.getItem('aiModelCredentials');
+        return savedCredentials ? JSON.parse(savedCredentials) : [];
+    }
+
+    async saveCredentials(credentials) {
+        localStorage.setItem('aiModelCredentials', JSON.stringify(credentials));
     }
 }
 

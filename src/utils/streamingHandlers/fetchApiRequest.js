@@ -1,9 +1,10 @@
-const apiCallStreaming = async (messages, onUpdateStreamingMessage, selectedModel, abortSignal) => {
+const apiCallStreaming = async (messages, onUpdateStreamingMessage, selectedModel, abortSignal, additionalHeaders = {}) => {
     const response = await fetch(selectedModel.endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            ...(selectedModel.apiKey && {'Authorization': `Bearer ${selectedModel.apiKey}`})
+            ...(selectedModel.apiKey && {'Authorization': `Bearer ${selectedModel.apiKey}`}),
+            ...additionalHeaders
         },
         body: JSON.stringify({
             messages: messages,
