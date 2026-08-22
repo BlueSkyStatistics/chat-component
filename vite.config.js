@@ -70,6 +70,6 @@ export default defineConfig({
         },
         outDir: 'dist',
         emptyOutDir: true,
-        sourceMap: 'inline',
+        sourceMap: false,
     }
 })
