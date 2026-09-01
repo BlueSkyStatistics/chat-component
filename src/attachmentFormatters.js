@@ -79,13 +79,35 @@ export const formatAttachment = (attachment) => {
  * @param {Array} message.attachments - Array of attachment objects
  * @returns {Object} Formatted message with attachments integrated into content
  */
-export const formatMessage = (message) => {
-    if (!message.attachments || message.attachments.length === 0) {
+export const formatMessage = (message, options = {}) => {
+    const includeInlineAttachments = options.includeInlineAttachments !== false;
+    const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+
+    if (!includeInlineAttachments && attachments.length > 0) {
+        const refs = attachments.map((attachment) => {
+            const id = attachment?.id || 'unknown-id';
+            const type = attachment?.type || 'attachment';
+            const title = attachment?.metadata?.title || type;
+            const language = attachment?.metadata?.language ? `, language=${attachment.metadata.language}` : '';
+            return `- id=${id}, type=${type}, title=${title}${language}`;
+        });
+        return {
+            role: message.role,
+            content: [
+                message.content || '',
+                '',
+                'Attachment references (request by id if needed):',
+                ...refs,
+            ].join('\n').trim()
+        };
+    }
+
+    if (attachments.length === 0) {
         return {role: message.role, content: message.content};
     }
 
     // Check if any attachments are charts (images)
-    const hasCharts = message.attachments.some(att => att.type === 'chart');
+    const hasCharts = attachments.some(att => att.type === 'chart');
 
     if (hasCharts) {
         // Use OpenAI Vision API format with content array
@@ -100,7 +122,7 @@ export const formatMessage = (message) => {
         }
 
         // Add each attachment
-        message.attachments.forEach(attachment => {
+        attachments.forEach(attachment => {
             if (attachment.type === 'chart') {
                 // Image attachment - use image_url format
                 contentArray.push({
@@ -127,7 +149,7 @@ export const formatMessage = (message) => {
         };
     } else {
         // No images - use simple string format for backwards compatibility
-        const formattedAttachments = message.attachments
+        const formattedAttachments = attachments
             .map(formatAttachment)
             .filter(content => !!content);
 

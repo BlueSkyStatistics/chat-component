@@ -4,6 +4,7 @@ import renderMathInElement from 'katex/contrib/auto-render'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism'
 import MessageAttachments from './MessageAttachments'
+import ToolCallTrace from './ToolCallTrace'
 import {preserveLatexEscapes} from '../utils/preserveLatexEscapes'
 import {useEffect, useMemo, useRef} from "react";
 
@@ -33,6 +34,14 @@ function Message({
     const actionButtonClass = useMemo(() => {
         return message.role === 'user' ? 'm-0 btn' : 'm-0 btn btn-light'
     }, [message.role])
+    const copyPayload = useMemo(() => {
+        if (!message.isToolCallTrace) return message.content
+        try {
+            return JSON.stringify(message.toolCall || {}, null, 2)
+        } catch {
+            return String(message.toolCall || '')
+        }
+    }, [message])
 
     // CommonMark would strip the backslashes from `\(`, `\[` before the math
     // ever reaches the rendered DOM, so we rewrite those TeX delimiters into
@@ -72,7 +81,7 @@ function Message({
                 <div className="btn-group btn-group-sm shadow-sm my-0" role="group">
                     <button
                         className={actionButtonClass}
-                        onClick={() => onCopy(message.content)}
+                        onClick={() => onCopy(copyPayload)}
                         title="Copy to clipboard"
                     >
                         <svg viewBox="0 0 24 24" width="16" height="16">
@@ -80,16 +89,18 @@ function Message({
                                   d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                         </svg>
                     </button>
-                    <button
-                        className={actionButtonClass}
-                        onClick={() => onToggleView(message.id)}
-                        title={message.showRaw ? "Show formatted" : "Show raw"}
-                    >
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <path fill="currentColor"
-                                  d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
-                        </svg>
-                    </button>
+                    {!message.isToolCallTrace && (
+                        <button
+                            className={actionButtonClass}
+                            onClick={() => onToggleView(message.id)}
+                            title={message.showRaw ? "Show formatted" : "Show raw"}
+                        >
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor"
+                                      d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                            </svg>
+                        </button>
+                    )}
                     <button
                         className={"text-danger " + actionButtonClass}
                         onClick={() => onDelete(message.id)}
@@ -112,7 +123,9 @@ function Message({
             />
 
             <div className="message-content" ref={contentRef}>
-                {message.showRaw ? (
+                {message.isToolCallTrace ? (
+                    <ToolCallTrace toolCall={message.toolCall} />
+                ) : message.showRaw ? (
                     <pre className="raw-content">{message.content}</pre>
                 ) : (
                     <ReactMarkdown

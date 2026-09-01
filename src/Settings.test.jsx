@@ -110,4 +110,30 @@ describe('Settings', () => {
             external: false,
         })
     })
+
+    it('groups models by credential in the select dropdown', () => {
+        render(
+            <Settings
+                models={[
+                    {id: 'model-1', name: 'alpha', credentialId: 'credential-1'},
+                    {id: 'model-2', name: 'beta', credentialId: 'credential-2'},
+                    {id: 'model-3', name: 'external-model', external: true},
+                ]}
+                credentials={[
+                    {id: 'credential-1', provider: 'manual', label: 'Local gateway', endpoint: 'https://example.test'},
+                    {id: 'credential-2', provider: 'openai', apiKey: 'test-key'},
+                ]}
+                onSave={() => {}}
+                onClose={() => {}}
+                addModelFormVisible
+            />
+        )
+
+        const options = screen.getByRole('combobox').querySelectorAll('optgroup')
+        expect(Array.from(options).map((group) => group.label)).toEqual([
+            'Local gateway',
+            'OpenAI',
+            'Unassigned / external',
+        ])
+    })
 })

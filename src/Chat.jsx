@@ -33,6 +33,24 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
+const makeToolTraceMessage = (event) => ({
+    id: `tool-${event.callId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role: 'assistant',
+    content: '',
+    showRaw: false,
+    showAttachments: false,
+    attachments: [],
+    isToolCallTrace: true,
+    toolCall: {
+        callId: event.callId || null,
+        name: event.name || 'Function call',
+        arguments: event.arguments || '',
+        result: event.result || '',
+        error: event.error || '',
+        status: event.status || 'requested',
+    },
+})
+
 function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
@@ -118,6 +136,32 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     useEffect(() => {
         messagesRef.current = messages
     }, [messages])
+
+    const upsertToolCallTrace = useCallback((event) => {
+        if (!event) return
+        const callId = event.callId || `anon-${Date.now()}`
+        setMessages((prev) => {
+            const index = prev.findIndex((msg) => msg.isToolCallTrace && msg.toolCall?.callId === callId)
+            if (index === -1) {
+                return [...prev, makeToolTraceMessage({...event, callId})]
+            }
+            const next = [...prev]
+            const current = next[index]
+            next[index] = {
+                ...current,
+                toolCall: {
+                    ...current.toolCall,
+                    callId,
+                    name: event.name ?? current.toolCall?.name,
+                    arguments: event.arguments ?? current.toolCall?.arguments,
+                    result: event.result ?? current.toolCall?.result,
+                    error: event.error ?? current.toolCall?.error,
+                    status: event.status ?? current.toolCall?.status,
+                }
+            }
+            return next
+        })
+    }, [])
 
     const refreshModels = useCallback(async () => {
         const provider = storageProviderRef.current
@@ -561,11 +605,16 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         setIsStreaming(true)
 
         const systemMessage = getSystemMessage()
+        const historyWithoutCurrent = newMessages.slice(0, -1)
+        const currentMessage = newMessages[newMessages.length - 1]
         const preparedMessages = [
             ...(systemMessage.trim() ? [{role: 'system', content: systemMessage}] : []),
-            ...newMessages
-            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role))
-            .map(formatMessage)
+            ...historyWithoutCurrent
+            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
+            .map((msg) => formatMessage(msg, {includeInlineAttachments: false})),
+            ...[currentMessage]
+            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
+            .map((msg) => formatMessage(msg, {includeInlineAttachments: true}))
         ]
         const onUpdateStreamingMessage = accumulatedResponse => {
             setMessages(prev => {
@@ -584,7 +633,10 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 preparedMessages,
                 onUpdateStreamingMessage,
                 runtimeModel,
-                abortControllerRef.current.signal
+                abortControllerRef.current.signal,
+                {
+                    onToolCallEvent: upsertToolCallTrace,
+                }
             )
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -653,7 +705,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
     return (
         <>
-            <div className="d-flex justify-content-between align-items-center border-bottom py-1 px-3">
+            <div className="d-flex flex-nowrap justify-content-between align-items-center border-bottom py-1 px-3">
                 <div className="d-flex align-items-center gap-1">
                     {hasConversationStorage && (
                         <>
@@ -695,8 +747,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
                 <div className="d-flex align-items-center gap-2">
                     {selectedModel && (
-                        <span className="">
-                            {selectedModel.name}
+                        <span className="d-flex flex-column align-items-end lh-sm text-end">
+                            <span>{selectedModel.name}</span>
+                            <span className="small text-muted">
+                                {credentials.find((credential) => credential.id === selectedModel.credentialId)
+                                    ? credentials.find((credential) => credential.id === selectedModel.credentialId).label?.trim() || 'Managed credentials'
+                                    : 'Unassigned / external'}
+                            </span>
                         </span>
                     )}
                     <div className="dropdown">
@@ -722,8 +779,25 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                                         }}
                                     >
                                         {models.length === 0 && <option value="">No models configured</option>}
-                                        {models.map((model, index) => (
-                                            <option key={index} value={makeModelId(model)}>{model.name}</option>
+                                        {Array.from(
+                                            models.reduce((groups, model) => {
+                                                const credential = credentials.find((item) => item.id === model.credentialId)
+                                                const groupKey = credential?.id || 'unassigned'
+                                                if (!groups.has(groupKey)) {
+                                                    groups.set(groupKey, {
+                                                        label: credential?.label?.trim() || (credential ? 'Managed credentials' : 'Unassigned / external'),
+                                                        models: [],
+                                                    })
+                                                }
+                                                groups.get(groupKey).models.push(model)
+                                                return groups
+                                            }, new Map()).values()
+                                        ).map((group) => (
+                                            <optgroup key={group.label} label={group.label}>
+                                                {group.models.map((model) => (
+                                                    <option key={makeModelId(model)} value={makeModelId(model)}>{model.name}</option>
+                                                ))}
+                                            </optgroup>
                                         ))}
                                     </select>
                                     <button
