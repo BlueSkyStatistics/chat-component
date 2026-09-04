@@ -80,7 +80,7 @@ export const formatAttachment = (attachment) => {
  * @param {Array} message.attachments - Array of attachment objects
  * @returns {Object} Formatted message with attachments integrated into content
  */
-export const formatMessage = (message, options = {}) => {
+export const formatMessage = (message, options = {includeInlineAttachments: false}) => {
     const includeInlineAttachments = options.includeInlineAttachments !== false;
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
 

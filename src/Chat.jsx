@@ -336,31 +336,31 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         }
     }, [getRegisteredModelTools, executeRegisteredToolCall])
 
-    useEffect(() => {
-        const unregister = registerModelTool({
-            name: 'fetchAttachmentById',
-            description: 'Fetch the full content of a chat attachment by attachment id.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    attachmentId: {
-                        type: 'string',
-                        description: 'The attachment id from the attachment reference list.',
-                    },
-                },
-                required: ['attachmentId'],
-                additionalProperties: false,
-            },
-            execute: async ({arguments: toolArguments, updateStatus}) => {
-                updateStatus('running', {result: 'Looking up attachment...'});
-                const {attachmentId} = toolArguments
-                // Emulated network / processing delay for testing waiting behavior
-                // await new Promise((resolve) => setTimeout(resolve, 3000))
-                return fetchAttachmentById(attachmentId)
-            },
-        })
-        return () => unregister()
-    }, [fetchAttachmentById])
+    // useEffect(() => {
+    //     const unregister = registerModelTool({
+    //         name: 'fetchAttachmentById',
+    //         description: 'Fetch the full content of a chat attachment by attachment id.',
+    //         parameters: {
+    //             type: 'object',
+    //             properties: {
+    //                 attachmentId: {
+    //                     type: 'string',
+    //                     description: 'The attachment id from the attachment reference list.',
+    //                 },
+    //             },
+    //             required: ['attachmentId'],
+    //             additionalProperties: false,
+    //         },
+    //         execute: async ({arguments: toolArguments, updateStatus}) => {
+    //             updateStatus('running', {result: 'Looking up attachment...'});
+    //             const {attachmentId} = toolArguments
+    //             // Emulated network / processing delay for testing waiting behavior
+    //             // await new Promise((resolve) => setTimeout(resolve, 3000))
+    //             return fetchAttachmentById(attachmentId)
+    //         },
+    //     })
+    //     return () => unregister()
+    // }, [fetchAttachmentById])
 
 
     const copyToClipboard = async (text) => {
@@ -717,10 +717,10 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             ...(systemMessage.trim() ? [{role: 'system', content: systemMessage}] : []),
             ...historyWithoutCurrent
             .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
-            .map((msg) => formatMessage(msg, {includeInlineAttachments: false})),
+            .map((msg) => formatMessage(msg, {includeInlineAttachments: true})),
             ...[currentMessage]
-            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
-            .map((msg) => formatMessage(msg, {includeInlineAttachments: true}))
+            // .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
+            // .map((msg) => formatMessage(msg, {includeInlineAttachments: true}))
         ]
         const onUpdateStreamingMessage = accumulatedResponse => {
             setMessages(prev => {
