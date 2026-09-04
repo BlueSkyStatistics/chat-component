@@ -36,12 +36,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project
-        run: npm run build
-
-      - name: Install asar
-        run: npm install -g asar
-
       - name: Increment version
         if: ${{ github.event.inputs.increment_version == true || github.event_name != 'workflow_dispatch' }}
         run: |
@@ -62,6 +56,12 @@ jobs:
           git add package.json
           git commit -m "chore: bump version to ${new_version}"
           git push
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install asar
+        run: npm install -g asar
 
       - name: Create archives
         run: |
