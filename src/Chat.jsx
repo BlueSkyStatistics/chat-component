@@ -355,7 +355,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 updateStatus('running', {result: 'Looking up attachment... (simulated delay)'});
                 const {attachmentId} = toolArguments
                 // Emulated network / processing delay for testing waiting behavior
-                await new Promise((resolve) => setTimeout(resolve, 3000))
+                // await new Promise((resolve) => setTimeout(resolve, 3000))
                 return fetchAttachmentById(attachmentId)
             },
         })
