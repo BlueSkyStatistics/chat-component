@@ -74,6 +74,7 @@ export const formatAttachment = (attachment) => {
 /**
  * Format a message with its attachments
  * @param {Object} message - The message object to format
+ * @param {Object} options - Formatting options
  * @param {string} message.role - The role of the message sender
  * @param {string} message.content - The message content
  * @param {Array} message.attachments - Array of attachment objects
@@ -96,7 +97,7 @@ export const formatMessage = (message, options = {}) => {
             content: [
                 message.content || '',
                 '',
-                'Attachment references (request by id if needed):',
+                'Attachment references (call fetchAttachmentById with id to fetch full content):',
                 ...refs,
             ].join('\n').trim()
         };

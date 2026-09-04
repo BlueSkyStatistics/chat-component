@@ -166,6 +166,27 @@ All exports use the following JSON structure:
 }
 ```
 
+### Fetching a full attachment by ID
+
+The chat component now exposes `window.electronApi.fetchAttachmentById(id)` so a model tool handler can request the full payload for an older attachment reference.
+
+Return shape:
+
+```typescript
+type AttachmentLookupResult =
+  | { ok: true; id: string; source: 'pending' | 'message'; messageId?: string | number; messageRole?: string; attachment: OutputElement & { id: string | number } }
+  | { ok: false; error: string };
+```
+
+Example:
+
+```javascript
+const result = window.electronApi.fetchAttachmentById('cell-2-output');
+if (result.ok) {
+  // result.attachment.data contains the full code/chart/table payload
+}
+```
+
 The importer also accepts a bare conversation object or a bare array of
 conversations, which makes the format easy to produce from other tools.
 

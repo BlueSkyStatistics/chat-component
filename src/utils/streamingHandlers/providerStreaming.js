@@ -1,5 +1,6 @@
 import {getAzureAccessToken} from '../providers/azureAuth'
 import {apiCallStreaming} from './fetchApiRequest'
+import {executeRegisteredToolCall, getRegisteredModelTools} from './tooling'
 
 const normalizeRole = (role) => {
     if (['system', 'user', 'assistant', 'developer'].includes(role)) return role
@@ -38,6 +39,7 @@ const toResponsesInput = (messages) => {
 
 const toolKeyFromEvent = (event) => event?.item_id || `tool-${event?.output_index ?? -1}`
 const toolKeyFromItem = (item, outputIndex) => item?.id || item?.call_id || `tool-${outputIndex ?? -1}`
+const MAX_TOOL_ROUNDS = 6
 
 // Streams a Responses API request using the renderer's native fetch + SSE
 // parsing. Avoids bundling the OpenAI SDK, whose environment/streaming
@@ -57,32 +59,11 @@ const streamResponses = async ({
         }
     }
 
-    const toolCalls = new Map()
-    let accumulatedResponse = ''
-    const input = toResponsesInput(messages)
+    let finalResponseText = ''
+    let pendingInput = toResponsesInput(messages)
+    let previousResponseId = null
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...headers,
-        },
-        body: JSON.stringify({model, input, stream: true}),
-        signal: abortSignal,
-    })
-
-    if (!response.ok) {
-        let message = `HTTP error! status: ${response.status}`
-        try {
-            const errorData = await response.json()
-            message = `HTTP error! ${errorData?.error?.message || JSON.stringify(errorData)}`
-        } catch (_) {
-            // response body wasn't JSON; keep the status-only message
-        }
-        throw new Error(message)
-    }
-
-    const handleEvent = (dataJson) => {
+    const handleEvent = (dataJson, state) => {
         let event
         try {
             event = JSON.parse(dataJson)
@@ -90,90 +71,59 @@ const streamResponses = async ({
             console.error('Error parsing responses event:', e)
             return
         }
-        const type = event.type
 
-        if (type === 'response.output_text.delta') {
-            accumulatedResponse += event.delta || ''
-            onUpdateStreamingMessage(accumulatedResponse)
-            return
-        }
+        const {type} = event
 
-        if (type === 'response.output_item.added' && event.item?.type === 'function_call') {
-            const key = toolKeyFromItem(event.item, event.output_index)
-            const next = {
-                callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
-                name: event.item?.name || 'function_call',
-                arguments: event.item?.arguments || '',
-                result: '',
-                error: '',
-                status: 'requesting',
+        switch (type) {
+            case 'response.output_text.delta': {
+                finalResponseText += event.delta || ''
+                onUpdateStreamingMessage(finalResponseText)
+                return
             }
-            toolCalls.set(key, next)
-            emitToolEvent(next)
-            return
-        }
-
-        if (type === 'response.function_call_arguments.delta') {
-            const key = toolKeyFromEvent(event)
-            const previous = toolCalls.get(key) || {
-                callId: event.item_id || `tool-${event.output_index}`,
-                name: 'function_call',
-                arguments: '',
-                result: '',
-                error: '',
-                status: 'requesting',
+            case 'response.created': {
+                state.responseId = event.response?.id || state.responseId
+                return
             }
-            const next = {
-                ...previous,
-                arguments: `${previous.arguments || ''}${event.delta || ''}`,
-                status: 'requesting',
+            case 'response.output_item.added': {
+                if (event.item?.type === 'function_call') {
+                    const key = toolKeyFromItem(event.item, event.output_index)
+                    const next = {
+                        callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
+                        name: event.item?.name || 'function_call',
+                        arguments: event.item?.arguments || '',
+                        result: '',
+                        error: '',
+                        status: 'requesting',
+                    }
+                    state.toolCalls.set(key, next)
+                    emitToolEvent(next)
+                    state.shouldExecuteTools = true
+                }
+                return
             }
-            toolCalls.set(key, next)
-            emitToolEvent(next)
-            return
-        }
-
-        if (type === 'response.function_call_arguments.done') {
-            const key = toolKeyFromEvent(event)
-            const previous = toolCalls.get(key) || {
-                callId: event.item_id || `tool-${event.output_index}`,
-                name: 'function_call',
-                arguments: '',
-                result: '',
-                error: '',
-            }
-            const next = {
-                ...previous,
-                arguments: event.arguments || previous.arguments || '',
-                status: 'requested',
-            }
-            toolCalls.set(key, next)
-            emitToolEvent(next)
-            return
-        }
-
-        if (type === 'response.output_item.done') {
-            if (event.item?.type === 'function_call') {
-                const key = toolKeyFromItem(event.item, event.output_index)
-                const previous = toolCalls.get(key) || {
-                    callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
-                    name: event.item?.name || 'function_call',
+            case 'response.function_call_arguments.delta': {
+                const key = toolKeyFromEvent(event)
+                const previous = state.toolCalls.get(key) || {
+                    callId: event.item_id || `tool-${event.output_index}`,
+                    name: 'function_call',
                     arguments: '',
                     result: '',
                     error: '',
+                    status: 'requesting',
                 }
                 const next = {
                     ...previous,
-                    arguments: event.item?.arguments || previous.arguments || '',
-                    status: 'requested',
+                    arguments: `${previous.arguments || ''}${event.delta || ''}`,
+                    status: 'requesting',
                 }
-                toolCalls.set(key, next)
+                state.toolCalls.set(key, next)
                 emitToolEvent(next)
+                return
             }
-            if (event.item?.type === 'function_call_output') {
-                const key = toolKeyFromItem(event.item, event.output_index)
-                const previous = toolCalls.get(key) || {
-                    callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
+            case 'response.function_call_arguments.done': {
+                const key = toolKeyFromEvent(event)
+                const previous = state.toolCalls.get(key) || {
+                    callId: event.item_id || `tool-${event.output_index}`,
                     name: 'function_call',
                     arguments: '',
                     result: '',
@@ -181,52 +131,161 @@ const streamResponses = async ({
                 }
                 const next = {
                     ...previous,
-                    result: event.item?.output || '',
-                    error: '',
-                    status: 'succeeded',
+                    arguments: event.arguments || previous.arguments || '',
+                    status: 'requested',
                 }
-                toolCalls.set(key, next)
+                state.toolCalls.set(key, next)
                 emitToolEvent(next)
+                return
             }
+            case 'response.output_item.done': {
+                if (event.item?.type === 'function_call') {
+                    const key = toolKeyFromItem(event.item, event.output_index)
+                    const previous = state.toolCalls.get(key) || {
+                        callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
+                        name: event.item?.name || 'function_call',
+                        arguments: '',
+                        result: '',
+                        error: '',
+                    }
+                    const next = {
+                        ...previous,
+                        arguments: event.item?.arguments || previous.arguments || '',
+                        status: 'requested',
+                    }
+                    state.toolCalls.set(key, next)
+                    emitToolEvent(next)
+                }
+                if (event.item?.type === 'function_call_output') {
+                    const key = toolKeyFromItem(event.item, event.output_index)
+                    const previous = state.toolCalls.get(key) || {
+                        callId: event.item?.call_id || event.item?.id || `tool-${event.output_index}`,
+                        name: 'function_call',
+                        arguments: '',
+                        result: '',
+                        error: '',
+                    }
+                    const next = {
+                        ...previous,
+                        result: event.item?.output || '',
+                        error: '',
+                        status: 'succeeded',
+                    }
+                    state.toolCalls.set(key, next)
+                    emitToolEvent(next)
+                }
+                return
+            }
+            case 'response.failed': {
+                throw new Error(event.response?.error?.message || 'Response request failed.')
+            }
+            case 'error': {
+                throw new Error(event.message || event.error?.message || 'Response stream error.')
+            }
+            default:
+                return
+        }
+    }
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+        const tools = getRegisteredModelTools()
+        const body = previousResponseId
+            ? {model, previous_response_id: previousResponseId, input: pendingInput, stream: true, tools, tool_choice: 'auto'}
+            : {model, input: pendingInput, stream: true, tools, tool_choice: 'auto'}
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers,
+            },
+            body: JSON.stringify(body),
+            signal: abortSignal,
+        })
+
+        if (!response.ok) {
+            let message = `HTTP error! status: ${response.status}`
+            try {
+                const errorData = await response.json()
+                message = `HTTP error! ${errorData?.error?.message || JSON.stringify(errorData)}`
+            } catch (_) {
+                // response body wasn't JSON; keep the status-only message
+            }
+            throw new Error(message)
+        }
+
+        const state = {
+            responseId: null,
+            toolCalls: new Map(),
+            shouldExecuteTools: false,
+        }
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+            const {done, value} = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, {stream: true})
+
+            let newlineIndex
+            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.slice(0, newlineIndex)
+                buffer = buffer.slice(newlineIndex + 1)
+                if (line.startsWith('data: ')) {
+                    const dataJson = line.slice(6)
+                    if (dataJson === '[DONE]') continue
+                    handleEvent(dataJson, state)
+                }
+            }
+        }
+
+        if (buffer.startsWith('data: ')) {
+            const dataJson = buffer.slice(6)
+            if (dataJson && dataJson !== '[DONE]') handleEvent(dataJson, state)
+        }
+
+        previousResponseId = state.responseId || previousResponseId
+        if (!state.shouldExecuteTools || state.toolCalls.size === 0) {
             return
         }
 
-        if (type === 'response.failed') {
-            throw new Error(event.response?.error?.message || 'Response request failed.')
+        const toolOutputs = []
+        for (const toolCall of state.toolCalls.values()) {
+            if (toolCall.status !== 'requested') continue
+            emitToolEvent({...toolCall, status: 'running'})
+            const execution = await executeRegisteredToolCall(toolCall, {
+                onStatusChange: (statusEvent) => {
+                    emitToolEvent({
+                        ...toolCall,
+                        ...statusEvent,
+                    })
+                },
+            })
+            const status = execution?.ok === false ? 'failed' : 'succeeded'
+            const resultPayload = execution?.ok === false
+                ? {ok: false, error: execution.error || 'Tool call failed.'}
+                : execution
+            const formattedResult = JSON.stringify(resultPayload)
+            emitToolEvent({
+                ...toolCall,
+                result: formattedResult,
+                error: status === 'failed' ? (execution?.error || 'Tool call failed.') : '',
+                status,
+            })
+            toolOutputs.push({
+                type: 'function_call_output',
+                call_id: toolCall.callId,
+                output: formattedResult,
+            })
         }
-        if (type === 'error') {
-            throw new Error(event.message || event.error?.message || 'Response stream error.')
+
+        if (toolOutputs.length === 0) {
+            return
         }
+        pendingInput = toolOutputs
     }
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-        const {done, value} = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, {stream: true})
-
-        let newlineIndex
-        // Process complete lines only; keep the trailing partial line in the
-        // buffer so events split across chunks are stitched together correctly.
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-            const line = buffer.slice(0, newlineIndex)
-            buffer = buffer.slice(newlineIndex + 1)
-            if (line.startsWith('data: ')) {
-                const dataJson = line.slice(6)
-                if (dataJson === '[DONE]') continue
-                handleEvent(dataJson)
-            }
-        }
-    }
-
-    // Flush any trailing line that wasn't newline-terminated.
-    if (buffer.startsWith('data: ')) {
-        const dataJson = buffer.slice(6)
-        if (dataJson && dataJson !== '[DONE]') handleEvent(dataJson)
-    }
+    throw new Error(`Exceeded maximum tool-calling rounds (${MAX_TOOL_ROUNDS}).`)
 }
 
 const streamManualResponse = async (messages, onUpdateStreamingMessage, selectedModel, abortSignal, callbacks = {}) => {

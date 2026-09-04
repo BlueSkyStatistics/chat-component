@@ -49,12 +49,11 @@ function ToolCallTrace({toolCall}) {
                 <div className="small text-muted text-break">id: {callId}</div>
             </div>
 
-            <details className="tool-call-section" open>
+            <details className="tool-call-section">
                 <summary>Request arguments</summary>
                 <pre className="tool-call-pre mb-0">{args || '(none)'}</pre>
             </details>
-
-            <details className="tool-call-section" open={status === 'succeeded' || status === 'failed'}>
+            <details className="tool-call-section">
                 <summary>Result</summary>
                 <pre className="tool-call-pre mb-0">
                     {error || result || (status === 'failed' ? '(error unavailable)' : '(pending)')}

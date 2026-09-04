@@ -13,6 +13,7 @@ import {
     makeLegacyModelId,
     migrateModelConfiguration,
 } from './utils/modelConfig'
+import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
@@ -137,13 +138,81 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         messagesRef.current = messages
     }, [messages])
 
+    const findAttachmentInMessages = useCallback((attachmentId) => {
+        const id = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId)
+        if (!id) return null
+
+        const normalizedMessages = Array.isArray(messagesRef.current) ? messagesRef.current : []
+        for (let i = normalizedMessages.length - 1; i >= 0; i -= 1) {
+            const message = normalizedMessages[i]
+            const attachments = Array.isArray(message?.attachments) ? message.attachments : []
+            for (const attachment of attachments) {
+                if (String(attachment?.id) === id) {
+                    return {
+                        attachment,
+                        messageId: message.id,
+                        messageRole: message.role || 'unknown',
+                    }
+                }
+            }
+        }
+        return null
+    }, [])
+
+    const fetchAttachmentById = useCallback((attachmentId) => {
+        const id = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId)
+        if (!id) {
+            return {
+                ok: false,
+                error: 'attachmentId is required',
+            }
+        }
+        const pending = (Array.isArray(pendingAttachments) ? pendingAttachments : [])
+            .find((item) => String(item?.id) === id)
+        if (pending) {
+            return {
+                ok: true,
+                id,
+                source: 'pending',
+                attachment: pending,
+            }
+        }
+        const found = findAttachmentInMessages(id)
+        if (!found) {
+            return {
+                ok: false,
+                error: `Attachment not found: ${id}`,
+            }
+        }
+        return {
+            ok: true,
+            id,
+            source: 'message',
+            messageId: found.messageId,
+            messageRole: found.messageRole,
+            attachment: found.attachment,
+        }
+    }, [findAttachmentInMessages, pendingAttachments])
+
     const upsertToolCallTrace = useCallback((event) => {
         if (!event) return
-        const callId = event.callId || `anon-${Date.now()}`
+        const callId = event.callId || event.call_id || event.id || `anon-${Date.now()}`
         setMessages((prev) => {
             const index = prev.findIndex((msg) => msg.isToolCallTrace && msg.toolCall?.callId === callId)
             if (index === -1) {
-                return [...prev, makeToolTraceMessage({...event, callId})]
+                const trace = makeToolTraceMessage({...event, callId})
+                // Insert before the (streaming) assistant response so the
+                // tool call card renders above the reply it contributed to.
+                let insertAt = prev.length
+                for (let i = prev.length - 1; i >= 0; i -= 1) {
+                    if (prev[i]?.role === 'assistant' && !prev[i].isToolCallTrace) {
+                        insertAt = i
+                        break
+                    }
+                }
+                const next = [...prev]
+                next.splice(insertAt, 0, trace)
+                return next
             }
             const next = [...prev]
             const current = next[index]
@@ -256,6 +325,42 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             window.removeEventListener('outputElement', outputHandler);
         };
     }, [])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const existingApi = window.electronApi || {chat: {}}
+        window.electronApi.chat = {
+            ...existingApi.chat || {},
+            getRegisteredModelTools,
+            executeRegisteredToolCall
+        }
+    }, [getRegisteredModelTools, executeRegisteredToolCall])
+
+    useEffect(() => {
+        const unregister = registerModelTool({
+            name: 'fetchAttachmentById',
+            description: 'Fetch the full content of a chat attachment by attachment id.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    attachmentId: {
+                        type: 'string',
+                        description: 'The attachment id from the attachment reference list.',
+                    },
+                },
+                required: ['attachmentId'],
+                additionalProperties: false,
+            },
+            execute: async ({arguments: toolArguments, updateStatus}) => {
+                updateStatus('running', {result: 'Looking up attachment... (simulated delay)'});
+                const {attachmentId} = toolArguments
+                // Emulated network / processing delay for testing waiting behavior
+                await new Promise((resolve) => setTimeout(resolve, 3000))
+                return fetchAttachmentById(attachmentId)
+            },
+        })
+        return () => unregister()
+    }, [fetchAttachmentById])
 
 
     const copyToClipboard = async (text) => {
@@ -592,10 +697,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         setPendingAttachments([]) // Clear pending attachments after adding to message
 
         // Add an empty assistant message that we'll stream into
+        const assistantMessageId = Date.now() + 1
         setMessages(prev => [...prev, {
             content: '',
             role: 'assistant',
-            id: Date.now() + 1,
+            id: assistantMessageId,
             showRaw: false,
             showAttachments: false,
             attachments: []
@@ -619,7 +725,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         const onUpdateStreamingMessage = accumulatedResponse => {
             setMessages(prev => {
                 const newMessages = [...prev]
-                newMessages[newMessages.length - 1].content = accumulatedResponse
+                const assistantIndex = newMessages.findIndex((msg) => msg.id === assistantMessageId)
+                if (assistantIndex !== -1) {
+                    newMessages[assistantIndex] = {
+                        ...newMessages[assistantIndex],
+                        content: accumulatedResponse,
+                    }
+                }
                 return newMessages
             })
         }
