@@ -352,7 +352,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 additionalProperties: false,
             },
             execute: async ({arguments: toolArguments, updateStatus}) => {
-                updateStatus('running', {result: 'Looking up attachment... (simulated delay)'});
+                updateStatus('running', {result: 'Looking up attachment...'});
                 const {attachmentId} = toolArguments
                 // Emulated network / processing delay for testing waiting behavior
                 // await new Promise((resolve) => setTimeout(resolve, 3000))
