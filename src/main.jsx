@@ -6,6 +6,10 @@ import {
   ConversationStorageInterface,
   LocalStorageConversationProvider,
 } from './storage/conversationStorage'
+import {
+  PromptStorageInterface,
+  LocalStoragePromptProvider,
+} from './storage/promptStorage'
 import {providerStreaming} from "./utils/streamingHandlers/providerStreaming.js";
 
 // Store the root instance
@@ -31,7 +35,24 @@ let root = null;
 //   messageStreamingHandler - optional custom handler. It receives a resolved
 //                           runtime model with legacy endpoint/apiKey fields
 //                           where applicable plus its `credential` metadata.
-function initChatComponent(containerId, modelStorage, conversationStorage, onConversationError, options={addModelsAllowed: true}, messageStreamingHandler = providerStreaming) {
+//   tier1PromptStorage    - optional PromptStorageInterface implementation for
+//                           conversation-level "guidance" playbooks. Omit to
+//                           disable the feature entirely (its header button
+//                           is hidden, same spirit as omitting conversationStorage).
+//   tier2PromptStorage    - optional PromptStorageInterface implementation for
+//                           message-level "quick prompts". Independent of
+//                           tier1PromptStorage -- a host can offer either, both,
+//                           or neither.
+function initChatComponent(
+  containerId,
+  modelStorage,
+  conversationStorage,
+  onConversationError,
+  options={addModelsAllowed: true},
+  messageStreamingHandler = providerStreaming,
+  tier1PromptStorage,
+  tier2PromptStorage,
+) {
   console.log(`Chat Component v${__CHAT_VERSION__}`);
   const container = document.getElementById(containerId)
   if (container) {
@@ -47,6 +68,8 @@ function initChatComponent(containerId, modelStorage, conversationStorage, onCon
           onConversationError={onConversationError}
           options={options}
           messageStreamingHandler={messageStreamingHandler}
+          tier1PromptStorage={tier1PromptStorage}
+          tier2PromptStorage={tier2PromptStorage}
         />
       </React.StrictMode>
     );
@@ -65,4 +88,6 @@ export {
   LocalStorageProvider,
   ConversationStorageInterface,
   LocalStorageConversationProvider,
+  PromptStorageInterface,
+  LocalStoragePromptProvider,
 }
