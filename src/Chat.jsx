@@ -37,15 +37,7 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
-function Chat({
-    modelStorage,
-    conversationStorage,
-    onConversationError,
-    options,
-    messageStreamingHandler,
-    tier1PromptStorage,
-    tier2PromptStorage,
-}) {
+
 const makeToolTraceMessage = (event) => ({
     id: `tool-${event.callId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     role: 'assistant',
@@ -64,7 +56,8 @@ const makeToolTraceMessage = (event) => ({
     },
 })
 
-function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler}) {
+function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler, tier1PromptStorage,
+    tier2PromptStorage}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
     const [messages, setMessages] = useState(() => [makeGreetingMessage()])
@@ -1234,4 +1227,4 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     )
 }
 
-export default Chat
+export default Chat 
