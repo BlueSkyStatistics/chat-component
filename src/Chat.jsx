@@ -16,6 +16,7 @@ import {
     makeLegacyModelId,
     migrateModelConfiguration,
 } from './utils/modelConfig'
+import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
@@ -45,6 +46,25 @@ function Chat({
     tier1PromptStorage,
     tier2PromptStorage,
 }) {
+const makeToolTraceMessage = (event) => ({
+    id: `tool-${event.callId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role: 'assistant',
+    content: '',
+    showRaw: false,
+    showAttachments: false,
+    attachments: [],
+    isToolCallTrace: true,
+    toolCall: {
+        callId: event.callId || null,
+        name: event.name || 'Function call',
+        arguments: event.arguments || '',
+        result: event.result || '',
+        error: event.error || '',
+        status: event.status || 'requested',
+    },
+})
+
+function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
     const [messages, setMessages] = useState(() => [makeGreetingMessage()])
@@ -167,6 +187,100 @@ function Chat({
     useEffect(() => {
         messagesRef.current = messages
     }, [messages])
+
+    const findAttachmentInMessages = useCallback((attachmentId) => {
+        const id = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId)
+        if (!id) return null
+
+        const normalizedMessages = Array.isArray(messagesRef.current) ? messagesRef.current : []
+        for (let i = normalizedMessages.length - 1; i >= 0; i -= 1) {
+            const message = normalizedMessages[i]
+            const attachments = Array.isArray(message?.attachments) ? message.attachments : []
+            for (const attachment of attachments) {
+                if (String(attachment?.id) === id) {
+                    return {
+                        attachment,
+                        messageId: message.id,
+                        messageRole: message.role || 'unknown',
+                    }
+                }
+            }
+        }
+        return null
+    }, [])
+
+    const fetchAttachmentById = useCallback((attachmentId) => {
+        const id = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId)
+        if (!id) {
+            return {
+                ok: false,
+                error: 'attachmentId is required',
+            }
+        }
+        const pending = (Array.isArray(pendingAttachments) ? pendingAttachments : [])
+            .find((item) => String(item?.id) === id)
+        if (pending) {
+            return {
+                ok: true,
+                id,
+                source: 'pending',
+                attachment: pending,
+            }
+        }
+        const found = findAttachmentInMessages(id)
+        if (!found) {
+            return {
+                ok: false,
+                error: `Attachment not found: ${id}`,
+            }
+        }
+        return {
+            ok: true,
+            id,
+            source: 'message',
+            messageId: found.messageId,
+            messageRole: found.messageRole,
+            attachment: found.attachment,
+        }
+    }, [findAttachmentInMessages, pendingAttachments])
+
+    const upsertToolCallTrace = useCallback((event) => {
+        if (!event) return
+        const callId = event.callId || event.call_id || event.id || `anon-${Date.now()}`
+        setMessages((prev) => {
+            const index = prev.findIndex((msg) => msg.isToolCallTrace && msg.toolCall?.callId === callId)
+            if (index === -1) {
+                const trace = makeToolTraceMessage({...event, callId})
+                // Insert before the (streaming) assistant response so the
+                // tool call card renders above the reply it contributed to.
+                let insertAt = prev.length
+                for (let i = prev.length - 1; i >= 0; i -= 1) {
+                    if (prev[i]?.role === 'assistant' && !prev[i].isToolCallTrace) {
+                        insertAt = i
+                        break
+                    }
+                }
+                const next = [...prev]
+                next.splice(insertAt, 0, trace)
+                return next
+            }
+            const next = [...prev]
+            const current = next[index]
+            next[index] = {
+                ...current,
+                toolCall: {
+                    ...current.toolCall,
+                    callId,
+                    name: event.name ?? current.toolCall?.name,
+                    arguments: event.arguments ?? current.toolCall?.arguments,
+                    result: event.result ?? current.toolCall?.result,
+                    error: event.error ?? current.toolCall?.error,
+                    status: event.status ?? current.toolCall?.status,
+                }
+            }
+            return next
+        })
+    }, [])
 
     const refreshModels = useCallback(async () => {
         const provider = storageProviderRef.current
@@ -305,6 +419,42 @@ function Chat({
             window.removeEventListener('outputElement', outputHandler);
         };
     }, [])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const existingApi = window.electronApi || {chat: {}}
+        window.electronApi.chat = {
+            ...existingApi.chat || {},
+            getRegisteredModelTools,
+            executeRegisteredToolCall
+        }
+    }, [getRegisteredModelTools, executeRegisteredToolCall])
+
+    useEffect(() => {
+        const unregister = registerModelTool({
+            name: 'fetchAttachmentById',
+            description: 'Fetch the full content of a chat attachment by attachment id.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    attachmentId: {
+                        type: 'string',
+                        description: 'The attachment id from the attachment reference list.',
+                    },
+                },
+                required: ['attachmentId'],
+                additionalProperties: false,
+            },
+            execute: async ({arguments: toolArguments, updateStatus}) => {
+                updateStatus('running', {result: 'Looking up attachment...'});
+                const {attachmentId} = toolArguments
+                // Emulated network / processing delay for testing waiting behavior
+                // await new Promise((resolve) => setTimeout(resolve, 3000))
+                return fetchAttachmentById(attachmentId)
+            },
+        })
+        return () => unregister()
+    }, [fetchAttachmentById])
 
 
     const copyToClipboard = async (text) => {
@@ -651,10 +801,11 @@ function Chat({
         setPendingAttachments([]) // Clear pending attachments after adding to message
 
         // Add an empty assistant message that we'll stream into
+        const assistantMessageId = Date.now() + 1
         setMessages(prev => [...prev, {
             content: '',
             role: 'assistant',
-            id: Date.now() + 1,
+            id: assistantMessageId,
             showRaw: false,
             showAttachments: false,
             attachments: []
@@ -669,16 +820,28 @@ function Chat({
         const systemMessage = [getSystemMessage(), tier1GuidanceText]
             .filter((part) => part && part.trim())
             .join('\n\n')
+      //  const systemMessage = getSystemMessage()
+        const historyWithoutCurrent = newMessages.slice(0, -1)
+        const currentMessage = newMessages[newMessages.length - 1]
         const preparedMessages = [
             ...(systemMessage.trim() ? [{role: 'system', content: systemMessage}] : []),
-            ...newMessages
-            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role))
-            .map(formatMessage)
+            ...historyWithoutCurrent
+            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
+            .map((msg) => formatMessage(msg, {includeInlineAttachments: false})),
+            ...[currentMessage]
+            .filter(msg => ['user', 'assistant', 'system', 'tool'].includes(msg.role) && !msg.isToolCallTrace)
+            .map((msg) => formatMessage(msg, {includeInlineAttachments: true}))
         ]
         const onUpdateStreamingMessage = accumulatedResponse => {
             setMessages(prev => {
                 const newMessages = [...prev]
-                newMessages[newMessages.length - 1].content = accumulatedResponse
+                const assistantIndex = newMessages.findIndex((msg) => msg.id === assistantMessageId)
+                if (assistantIndex !== -1) {
+                    newMessages[assistantIndex] = {
+                        ...newMessages[assistantIndex],
+                        content: accumulatedResponse,
+                    }
+                }
                 return newMessages
             })
         }
@@ -692,7 +855,10 @@ function Chat({
                 preparedMessages,
                 onUpdateStreamingMessage,
                 runtimeModel,
-                abortControllerRef.current.signal
+                abortControllerRef.current.signal,
+                {
+                    onToolCallEvent: upsertToolCallTrace,
+                }
             )
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -819,7 +985,7 @@ function Chat({
 
     return (
         <>
-            <div className="d-flex justify-content-between align-items-center border-bottom py-1 px-3">
+            <div className="d-flex flex-nowrap justify-content-between align-items-center border-bottom py-1 px-3">
                 <div className="d-flex align-items-center gap-1">
                     {hasConversationStorage && (
                         <>
@@ -878,8 +1044,13 @@ function Chat({
                         </button>
                     )}
                     {selectedModel && (
-                        <span className="">
-                            {selectedModel.name}
+                        <span className="d-flex flex-column align-items-end lh-sm text-end">
+                            <span>{selectedModel.name}</span>
+                            <span className="small text-muted">
+                                {credentials.find((credential) => credential.id === selectedModel.credentialId)
+                                    ? credentials.find((credential) => credential.id === selectedModel.credentialId).label?.trim() || 'Managed credentials'
+                                    : 'Unassigned / external'}
+                            </span>
                         </span>
                     )}
                     <div className="dropdown">
@@ -905,8 +1076,25 @@ function Chat({
                                         }}
                                     >
                                         {models.length === 0 && <option value="">No models configured</option>}
-                                        {models.map((model, index) => (
-                                            <option key={index} value={makeModelId(model)}>{model.name}</option>
+                                        {Array.from(
+                                            models.reduce((groups, model) => {
+                                                const credential = credentials.find((item) => item.id === model.credentialId)
+                                                const groupKey = credential?.id || 'unassigned'
+                                                if (!groups.has(groupKey)) {
+                                                    groups.set(groupKey, {
+                                                        label: credential?.label?.trim() || (credential ? 'Managed credentials' : 'Unassigned / external'),
+                                                        models: [],
+                                                    })
+                                                }
+                                                groups.get(groupKey).models.push(model)
+                                                return groups
+                                            }, new Map()).values()
+                                        ).map((group) => (
+                                            <optgroup key={group.label} label={group.label}>
+                                                {group.models.map((model) => (
+                                                    <option key={makeModelId(model)} value={makeModelId(model)}>{model.name}</option>
+                                                ))}
+                                            </optgroup>
                                         ))}
                                     </select>
                                     <button
