@@ -59,13 +59,13 @@ function GuidancePicker({prompts, allowCustom, selectedIds, onToggle, onAddCusto
                         </div>
 
                         <div className="modal-body">
-                            <p className="small text-muted mb-3">
+                            <p className="small mb-3" style={{color: 'var(--light)', opacity: 0.75}}>
                                 Selections apply to every message in this conversation.
                                 {!allowCustom && ' Managed by your organization -- ask your admin to add or update playbooks.'}
                             </p>
 
                             {prompts.length === 0 && (
-                                <p className="small text-muted fst-italic">No guidance playbooks are configured yet.</p>
+                                <p className="small fst-italic" style={{color: 'var(--light)', opacity: 0.75}}>No guidance playbooks are configured yet.</p>
                             )}
 
                             <div className="list-group mb-2">
@@ -79,13 +79,13 @@ function GuidancePicker({prompts, allowCustom, selectedIds, onToggle, onAddCusto
                                         />
                                         <span className="flex-grow-1 min-width-0">
                                             <span className="d-flex align-items-center gap-2">
-                                                <strong>{prompt.label}</strong>
+                                                <strong style={{color: 'var(--light)'}}>{prompt.label}</strong>
                                                 {prompt.managed && (
-                                                    <i className="fas fa-lock fa-xs text-muted" title="Managed by your organization"></i>
+                                                    <i className="fas fa-lock fa-xs" style={{color: 'var(--light)', opacity: 0.75}} title="Managed by your organization"></i>
                                                 )}
                                             </span>
                                             {prompt.description && (
-                                                <span className="d-block small text-muted">{prompt.description}</span>
+                                                <span className="d-block small" style={{color: 'var(--light)', opacity: 0.75}}>{prompt.description}</span>
                                             )}
                                         </span>
                                     </label>

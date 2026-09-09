@@ -2,10 +2,9 @@ import {useState} from 'react'
 
 /**
  * Tier 2 "Quick Prompts" picker -- message-level, not conversation-level.
- * Selections are staged (shown as chips above the composer by
- * PendingQuickPrompts) and folded into the *next* outgoing message only;
- * Chat.jsx clears the selection right after send, same lifecycle as
- * pendingAttachments.
+ * Selections stay checked in this menu (and reflected in the toggle button's
+ * badge count) and are folded into the *next* outgoing message only;
+ * Chat.jsx clears the selection right after send.
  *
  * Props:
  *  - prompts: merged managed + custom prompt list, each {id, label, promptText, managed}
@@ -36,37 +35,55 @@ function QuickPromptsMenu({prompts, allowCustom, selectedIds, onToggle, onAddCus
     }
 
     return (
-        <div className="dropdown">
+        <div className="dropup">
             <button
                 type="button"
-                className={`btn position-relative m-0 mr-2 ${selectedIds.size > 0 ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn m-0 mr-2 d-inline-flex align-items-center justify-content-center ${selectedIds.size > 0 ? 'btn-primary' : 'btn-secondary'}`}
+                style={{position: 'relative', width: '38px', height: '38px', padding: 0}}
                 data-bs-toggle="dropdown"
+                data-bs-boundary="viewport"
                 aria-expanded="false"
                 title="Quick prompts"
             >
-                <i className="fas fa-list-check"></i>
+                <i className="fas fa-clipboard-check"></i>
                 {selectedIds.size > 0 && (
-                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary">
+                    <span
+                        className="badge rounded-pill bg-primary"
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            transform: 'translate(50%, -50%)',
+                        }}
+                    >
                         {selectedIds.size}
                     </span>
                 )}
             </button>
             <div className="dropdown-menu quick-prompts-dropdown p-2" style={{minWidth: '270px'}} onClick={(e) => e.stopPropagation()}>
-                <div className="px-1 pb-2 mb-2 border-bottom">
+                <div className="px-2 pb-2 mb-2 border-bottom">
                     <strong className="small">Quick Prompts</strong>
                     <div className="small text-muted">Added to this message only -- cleared after you send.</div>
                 </div>
 
                 {prompts.length === 0 && (
-                    <p className="small text-muted fst-italic px-1">No quick prompts are configured yet.</p>
+                    <p className="small text-muted fst-italic px-2">No quick prompts are configured yet.</p>
                 )}
 
-                <div className="list-group list-group-flush mb-2" style={{maxHeight: '220px', overflowY: 'auto'}}>
+                <div className="list-group list-group-flush mb-3" style={{maxHeight: '220px', overflowY: 'auto'}}>
                     {prompts.map((prompt) => (
                         <label key={prompt.id} className="list-group-item py-1 px-2 d-flex align-items-center gap-2">
                             <input
                                 type="checkbox"
                                 className="form-check-input flex-shrink-0"
+                                style={{
+                                    position: 'static',
+                                    margin: 0,
+                                    width: '1em',
+                                    height: '1em',
+                                    minWidth: '1em',
+                                    minHeight: '1em',
+                                }}
                                 checked={selectedIds.has(prompt.id)}
                                 onChange={() => onToggle(prompt.id)}
                             />
@@ -76,7 +93,7 @@ function QuickPromptsMenu({prompts, allowCustom, selectedIds, onToggle, onAddCus
                 </div>
 
                 {allowCustom && (
-                    <div className="border-top pt-2">
+                    <div className="border-top pt-3 px-2">
                         {!showAddForm ? (
                             <button
                                 type="button"

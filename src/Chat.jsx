@@ -8,7 +8,6 @@ import Message from './components/Message'
 import PendingAttachments from './components/PendingAttachments'
 import GuidancePicker from './components/GuidancePicker'
 import QuickPromptsMenu from './components/QuickPromptsMenu'
-import PendingQuickPrompts from './components/PendingQuickPrompts'
 import {deriveConversationTitle, makeConversationId} from './utils/conversationIO'
 import {
     getRuntimeModel,
@@ -939,14 +938,6 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         })
     }, [])
 
-    const removeTier2Prompt = useCallback((id) => {
-        setTier2SelectedIds((prev) => {
-            const next = new Set(prev)
-            next.delete(id)
-            return next
-        })
-    }, [])
-
     const handleAddCustomTier1Prompt = useCallback(async ({label, promptText}) => {
         const storage = tier1StorageRef.current
         if (!storage) throw new Error('Custom playbooks are not supported here.')
@@ -1138,8 +1129,6 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     getIconForType={getIconForType}
                 />
             )}
-
-            <PendingQuickPrompts prompts={tier2SelectedPrompts} onRemove={removeTier2Prompt} />
 
             <form onSubmit={handleSubmit} className="border-top p-2 m-0 pt-3">
                 <div className="input-group">
