@@ -11,6 +11,11 @@ import {
   LocalStoragePromptProvider,
 } from './storage/promptStorage'
 import {providerStreaming} from "./utils/streamingHandlers/providerStreaming.js";
+import {
+  executeRegisteredToolCall,
+  getRegisteredModelTools,
+  registerModelTool
+} from "./utils/streamingHandlers/tooling.js";
 
 // Store the root instance
 let root = null;
@@ -74,6 +79,7 @@ function initChatComponent(
       </React.StrictMode>
     );
   }
+  return {getRegisteredModelTools, executeRegisteredToolCall, registerModelTool}
 }
 
 // Development mode: opt in to the bundled localStorage conversation provider

@@ -52,7 +52,13 @@ export const executeRegisteredToolCall = async (toolCall, options = {}) => {
     }
 }
 
-export const registerModelTool = ({name, description = '', parameters = {type: 'object', properties: {}}, execute}) => {
+export const registerModelTool = (
+    {
+        name,
+        description = '',
+        parameters = {type: 'object', properties: {}},
+        execute
+    }) => {
     if (!name || typeof name !== 'string') {
         throw new Error('registerModelTool requires a non-empty string name.')
     }
