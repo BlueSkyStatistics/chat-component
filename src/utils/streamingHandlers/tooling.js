@@ -21,6 +21,25 @@ export const getRegisteredModelTools = () => {
     }))
 }
 
+// The Chat Completions API (fetchApiRequest.js) and the Responses API
+// (providerStreaming.js's streamResponses, used for the 'openai'/'azure'
+// providers) declare function tools with different shapes:
+//   - Chat Completions: { type: 'function', function: { name, description, parameters } }
+//   - Responses API:    { type: 'function', name, description, parameters } (flat, no
+//                        nested "function" object)
+// getRegisteredModelTools() above returns the Chat Completions shape. Sending that
+// same shape to the Responses API leaves tools[0] without a top-level "name", which
+// the API rejects with "Missing required parameter: 'tools[0].name'". This variant
+// returns the flat shape the Responses API actually requires.
+export const getRegisteredModelToolsForResponsesAPI = () => {
+    return [...chatToolRegistry.values()].map((tool) => ({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+    }))
+}
+
 export const executeRegisteredToolCall = async (toolCall, options = {}) => {
     const name = toolCall?.name || ''
     const argumentsObject = parseToolArguments(toolCall?.arguments)
