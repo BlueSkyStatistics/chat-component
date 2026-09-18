@@ -1,6 +1,6 @@
 import {getAzureAccessToken} from '../providers/azureAuth'
 import {apiCallStreaming} from './fetchApiRequest'
-import {executeRegisteredToolCall, getRegisteredModelTools} from './tooling'
+import {executeRegisteredToolCall, getRegisteredModelToolsForResponsesAPI} from './tooling'
 
 const normalizeRole = (role) => {
     if (['system', 'user', 'assistant', 'developer'].includes(role)) return role
@@ -188,7 +188,9 @@ const streamResponses = async ({
     }
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-        const tools = getRegisteredModelTools()
+        // Responses API tools must be flat ({ type, name, description, parameters }),
+        // not the Chat Completions nested shape -- see getRegisteredModelToolsForResponsesAPI.
+        const tools = getRegisteredModelToolsForResponsesAPI()
         const body = previousResponseId
             ? {model, previous_response_id: previousResponseId, input: pendingInput, stream: true, tools, tool_choice: 'auto'}
             : {model, input: pendingInput, stream: true, tools, tool_choice: 'auto'}

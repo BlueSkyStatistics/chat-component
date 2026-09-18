@@ -6,6 +6,8 @@ import Settings from './Settings'
 import Conversations from './Conversations'
 import Message from './components/Message'
 import PendingAttachments from './components/PendingAttachments'
+import GuidancePicker from './components/GuidancePicker'
+import QuickPromptsMenu from './components/QuickPromptsMenu'
 import {deriveConversationTitle, makeConversationId} from './utils/conversationIO'
 import {
     getRuntimeModel,
@@ -35,6 +37,7 @@ const makeGreetingMessage = () => ({
 const hasUserActivity = (messages) =>
     Array.isArray(messages) && messages.some((m) => m && m.role === 'user')
 
+
 const makeToolTraceMessage = (event) => ({
     id: `tool-${event.callId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     role: 'assistant',
@@ -53,7 +56,8 @@ const makeToolTraceMessage = (event) => ({
     },
 })
 
-function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler}) {
+function Chat({modelStorage, conversationStorage, onConversationError, options, messageStreamingHandler, tier1PromptStorage,
+    tier2PromptStorage}) {
     // Lazy init so we don't allocate a fresh greeting object + `Date.now()` id
     // on every render (useState ignores subsequent values anyway).
     const [messages, setMessages] = useState(() => [makeGreetingMessage()])
@@ -73,6 +77,30 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         title: DEFAULT_TITLE,
         createdAt: null,
     })
+
+    // Tier 1 = conversation-level guidance ("playbooks"). The selection is
+    // persisted as part of the conversation itself (see the autosave effect
+    // and loadConversation below) so it survives switching away and back.
+    // Tier 2 = message-level quick prompts, staged like pendingAttachments
+    // and cleared after every send -- never persisted.
+    const [tier1Library, setTier1Library] = useState({allowCustom: false, prompts: []})
+    const [tier2Library, setTier2Library] = useState({allowCustom: true, prompts: []})
+    const [tier1SelectedIds, setTier1SelectedIds] = useState(() => new Set())
+    const [tier2SelectedIds, setTier2SelectedIds] = useState(() => new Set())
+    const [showGuidancePicker, setShowGuidancePicker] = useState(false)
+    const tier1LibraryRef = useRef(tier1Library)
+    useEffect(() => {
+        tier1LibraryRef.current = tier1Library
+    }, [tier1Library])
+    const tier2LibraryRef = useRef(tier2Library)
+    useEffect(() => {
+        tier2LibraryRef.current = tier2Library
+    }, [tier2Library])
+    // Guards the one-time "apply org defaultSelected playbooks" effect below
+    // so it never fires again once a real selection (fresh default, or a
+    // restored conversation's own) is in place.
+    const tier1DefaultsAppliedRef = useRef(false)
+
     const abortControllerRef = useRef(null)
     const chatMessagesRef = useRef(null)
     const inputRef = useRef(null)
@@ -123,6 +151,20 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     useEffect(() => {
         conversationStorageRef.current = conversationStorage || null
     }, [conversationStorage])
+
+    // Optional -- when a host app doesn't pass a tier's storage provider that
+    // tier is simply unavailable (its button/section renders nothing), same
+    // spirit as omitting conversationStorage.
+    const tier1StorageRef = useRef(tier1PromptStorage || null);
+    const tier2StorageRef = useRef(tier2PromptStorage || null);
+    const hasTier1Storage = !!tier1PromptStorage;
+    const hasTier2Storage = !!tier2PromptStorage;
+    useEffect(() => {
+        tier1StorageRef.current = tier1PromptStorage || null
+    }, [tier1PromptStorage])
+    useEffect(() => {
+        tier2StorageRef.current = tier2PromptStorage || null
+    }, [tier2PromptStorage])
 
     // Callback ref for storage errors so host apps can surface them in their
     // own UI. Updated via effect to avoid stale closures inside long-lived
@@ -288,6 +330,50 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         refreshModels();
     }, [refreshModels])
 
+    const refreshTier1Library = useCallback(async () => {
+        const storage = tier1StorageRef.current
+        if (!storage) return
+        const library = await storage.getPrompts()
+        setTier1Library({
+            allowCustom: !!library?.allowCustom,
+            prompts: Array.isArray(library?.prompts) ? library.prompts : [],
+        })
+    }, [])
+
+    const refreshTier2Library = useCallback(async () => {
+        const storage = tier2StorageRef.current
+        if (!storage) return
+        const library = await storage.getPrompts()
+        setTier2Library({
+            allowCustom: !!library?.allowCustom,
+            prompts: Array.isArray(library?.prompts) ? library.prompts : [],
+        })
+    }, [])
+
+    useEffect(() => {
+        refreshTier1Library()
+    }, [refreshTier1Library])
+
+    useEffect(() => {
+        refreshTier2Library()
+    }, [refreshTier2Library])
+
+    // One-time: once the Tier 1 library loads, seed the selection with the
+    // org's defaultSelected playbooks -- but only for a genuinely fresh
+    // conversation. If conversation hydration has already restored (or is
+    // about to restore) its own saved selection, activeConversationId will be
+    // set and this bails out instead of clobbering it.
+    useEffect(() => {
+        if (tier1DefaultsAppliedRef.current) return
+        if (tier1Library.prompts.length === 0) return
+        if (activeConversationId) return
+        if (hasUserActivity(messages)) return
+        setTier1SelectedIds(new Set(
+            tier1Library.prompts.filter((prompt) => prompt.defaultSelected).map((prompt) => prompt.id)
+        ))
+        tier1DefaultsAppliedRef.current = true
+    }, [tier1Library, activeConversationId, messages])
+
     // Listen for output elements from Electron
     useEffect(() => {
         const handleOutput = (element) => {
@@ -433,6 +519,9 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         skipNextAutosaveRef.current = true
         setMessages(Array.isArray(full.messages) ? full.messages : [])
         setPendingAttachments([])
+        setTier2SelectedIds(new Set())
+        setTier1SelectedIds(new Set(Array.isArray(full.tier1PromptIds) ? full.tier1PromptIds : []))
+        tier1DefaultsAppliedRef.current = true
         setActiveConversationId(full.id)
         setConversationMeta({
             title: full.title || DEFAULT_TITLE,
@@ -455,6 +544,10 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         abortActiveStream()
         setMessages([makeGreetingMessage()])
         setPendingAttachments([])
+        setTier2SelectedIds(new Set())
+        setTier1SelectedIds(new Set(
+            tier1LibraryRef.current.prompts.filter((prompt) => prompt.defaultSelected).map((prompt) => prompt.id)
+        ))
         setActiveConversationId(null)
         setConversationMeta({title: DEFAULT_TITLE, createdAt: null})
         const storage = conversationStorageRef.current
@@ -501,6 +594,8 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     }
                     skipNextAutosaveRef.current = true
                     setMessages(Array.isArray(full.messages) ? full.messages : [])
+                    setTier1SelectedIds(new Set(Array.isArray(full.tier1PromptIds) ? full.tier1PromptIds : []))
+                    tier1DefaultsAppliedRef.current = true
                     setActiveConversationId(full.id)
                     setConversationMeta({
                         title: full.title || DEFAULT_TITLE,
@@ -560,6 +655,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     createdAt,
                     updatedAt: now,
                     messages,
+                    tier1PromptIds: [...tier1SelectedIds],
                     version: 1,
                 }
                 await storage.saveConversation(conversation)
@@ -583,7 +679,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         return () => {
             clearTimeout(timerId)
         }
-    }, [messages, activeConversationId, reportStorageError])
+    }, [messages, activeConversationId, tier1SelectedIds, reportStorageError])
 
     // Called from the Conversations modal when the user renames the active
     // conversation; keeps the in-memory title in sync.
@@ -767,7 +863,13 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         abortControllerRef.current = new AbortController()
         setIsStreaming(true)
 
-        const systemMessage = getSystemMessage()
+        // Tier 1 conversation guidance folds into the system message on every
+        // request (unlike Tier 2 quick prompts, which are folded into the
+        // outgoing user message itself -- see handleSubmit).
+        const systemMessage = [getSystemMessage(), tier1GuidanceText]
+            .filter((part) => part && part.trim())
+            .join('\n\n')
+      //  const systemMessage = getSystemMessage()
         const historyWithoutCurrent = newMessages.slice(0, -1)
         const currentMessage = newMessages[newMessages.length - 1]
         const preparedMessages = [
@@ -824,9 +926,14 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
     async function handleSubmit(e) {
         e.preventDefault()
-        if (inputValue.trim()) {
-            const userMessage = inputValue.trim()
+        // Tier 2 quick prompts become part of the message they were staged
+        // for -- so what's shown in the transcript is exactly what was sent,
+        // same transparency principle as attachments.
+        const tier2Text = tier2SelectedPrompts.map((prompt) => prompt.promptText).filter(Boolean).join('\n\n')
+        const userMessage = [inputValue.trim(), tier2Text].filter(Boolean).join('\n\n')
+        if (userMessage) {
             setInputValue('')
+            setTier2SelectedIds(new Set())
             await streamResponse(userMessage)
         }
     }
@@ -872,6 +979,51 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         }
     }
 
+    const toggleTier1Prompt = useCallback((id) => {
+        setTier1SelectedIds((prev) => {
+            const next = new Set(prev)
+            next.has(id) ? next.delete(id) : next.add(id)
+            return next
+        })
+    }, [])
+
+    const toggleTier2Prompt = useCallback((id) => {
+        setTier2SelectedIds((prev) => {
+            const next = new Set(prev)
+            next.has(id) ? next.delete(id) : next.add(id)
+            return next
+        })
+    }, [])
+
+    const handleAddCustomTier1Prompt = useCallback(async ({label, promptText}) => {
+        const storage = tier1StorageRef.current
+        if (!storage) throw new Error('Custom playbooks are not supported here.')
+        const existingCustom = tier1LibraryRef.current.prompts.filter((prompt) => !prompt.managed)
+        const newPrompt = {id: `custom-tier1-${Date.now()}`, label, promptText}
+        await storage.saveCustomPrompts([...existingCustom, newPrompt])
+        await refreshTier1Library()
+    }, [refreshTier1Library])
+
+    const handleAddCustomTier2Prompt = useCallback(async ({label, promptText}) => {
+        const storage = tier2StorageRef.current
+        if (!storage) throw new Error('Custom quick prompts are not supported here.')
+        const existingCustom = tier2LibraryRef.current.prompts.filter((prompt) => !prompt.managed)
+        const newPrompt = {id: `custom-tier2-${Date.now()}`, label, promptText}
+        await storage.saveCustomPrompts([...existingCustom, newPrompt])
+        await refreshTier2Library()
+    }, [refreshTier2Library])
+
+    // Recomputed each render rather than memoized -- these lists are short
+    // and this mirrors the rest of the file's style (see e.g. selectedModel
+    // lookups in handleSaveSettings).
+    const tier1GuidanceText = tier1Library.prompts
+        .filter((prompt) => tier1SelectedIds.has(prompt.id))
+        .map((prompt) => prompt.promptText)
+        .filter(Boolean)
+        .join('\n\n')
+
+    const tier2SelectedPrompts = tier2Library.prompts.filter((prompt) => tier2SelectedIds.has(prompt.id))
+
     return (
         <>
             <div className="d-flex flex-nowrap justify-content-between align-items-center border-bottom py-1 px-3">
@@ -915,6 +1067,23 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 </div>
 
                 <div className="d-flex align-items-center gap-2">
+                    {hasTier1Storage && (
+                        <button
+                            type="button"
+                            className={`btn btn-sm position-relative p-1 m-0 ${tier1SelectedIds.size > 0 ? 'btn-link' : 'btn-link text-muted'}`}
+                            onClick={() => setShowGuidancePicker(true)}
+                            title={tier1SelectedIds.size > 0
+                                ? `Conversation guidance (${tier1SelectedIds.size} active)`
+                                : 'Conversation guidance'}
+                        >
+                            <i className="fas fa-shield-alt"></i>
+                            {tier1SelectedIds.size > 0 && (
+                                <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary">
+                                    {tier1SelectedIds.size}
+                                </span>
+                            )}
+                        </button>
+                    )}
                     {selectedModel && (
                         <span className="d-flex flex-column align-items-end lh-sm text-end">
                             <span>{selectedModel.name}</span>
@@ -926,9 +1095,9 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                         </span>
                     )}
                     <div className="dropdown">
-                        <button 
+                        <button
                             className="btn btn-link btn-sm p-1 m-0"
-                            type="button" 
+                            type="button"
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
                             title="Settings"
@@ -1048,6 +1217,15 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                             </span>
                         </button>
                     )}
+                    {hasTier2Storage && (
+                        <QuickPromptsMenu
+                            prompts={tier2Library.prompts}
+                            allowCustom={tier2Library.allowCustom}
+                            selectedIds={tier2SelectedIds}
+                            onToggle={toggleTier2Prompt}
+                            onAddCustomPrompt={handleAddCustomTier2Prompt}
+                        />
+                    )}
                     <textarea
                         id='chatUserInput'
                         ref={inputRef}
@@ -1096,8 +1274,18 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     onStorageError={reportStorageError}
                 />
             )}
+            {hasTier1Storage && showGuidancePicker && (
+                <GuidancePicker
+                    prompts={tier1Library.prompts}
+                    allowCustom={tier1Library.allowCustom}
+                    selectedIds={tier1SelectedIds}
+                    onToggle={toggleTier1Prompt}
+                    onAddCustomPrompt={handleAddCustomTier1Prompt}
+                    onClose={() => setShowGuidancePicker(false)}
+                />
+            )}
         </>
     )
 }
 
-export default Chat
+export default Chat 
