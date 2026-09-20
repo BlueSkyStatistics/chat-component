@@ -111,7 +111,7 @@ describe('Settings', () => {
         })
     })
 
-    it('groups models by credential in the select dropdown', () => {
+    it('groups models by credential in expandable credential cards', () => {
         render(
             <Settings
                 models={[
@@ -128,12 +128,12 @@ describe('Settings', () => {
                 addModelFormVisible
             />
         )
+        expect(screen.getByRole('button', {name: /Local gateway.*1 model/})).toBeTruthy()
+        expect(screen.getByRole('button', {name: /OpenAI.*1 model/})).toBeTruthy()
+        expect(screen.getByRole('button', {name: /Unassigned \/ external.*1 model/})).toBeTruthy()
 
-        const options = screen.getByRole('combobox').querySelectorAll('optgroup')
-        expect(Array.from(options).map((group) => group.label)).toEqual([
-            'Local gateway',
-            'OpenAI',
-            'Unassigned / external',
-        ])
+        expect(screen.queryByText('alpha')).toBeNull()
+        fireEvent.click(screen.getByRole('button', {name: /Local gateway.*1 model/}))
+        expect(screen.getByText('alpha')).toBeTruthy()
     })
 })

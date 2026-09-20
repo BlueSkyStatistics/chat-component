@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef, useCallback} from 'react'
+import {useState, useEffect, useRef, useCallback, useLayoutEffect} from 'react'
 import {formatMessage, getSystemMessage} from './attachmentFormatters'
 import 'katex/dist/katex.min.css'
 import './Chat.css'
@@ -21,6 +21,7 @@ const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
 const DEFAULT_TITLE = 'New Conversation'
 const AUTOSAVE_DEBOUNCE_MS = 500
+const PIN_BOTTOM_THRESHOLD_PX = 80
 
 const makeGreetingMessage = () => ({
     content: 'Hi, how can I help you?',
@@ -68,7 +69,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     const [selectedModel, setSelectedModel] = useState(null)
     const [isStreaming, setIsStreaming] = useState(false)
     const [pendingAttachments, setPendingAttachments] = useState([])
-    const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+    const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
     const [expandedAttachments, setExpandedAttachments] = useState(new Set())
     const [showAttachmentBar, setShowAttachmentBar] = useState(false)
     const [activeConversationId, setActiveConversationId] = useState(null)
@@ -101,24 +102,43 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     const tier1DefaultsAppliedRef = useRef(false)
 
     const abortControllerRef = useRef(null)
-    const messagesEndRef = useRef(null)
     const chatMessagesRef = useRef(null)
     const inputRef = useRef(null)
     const autosaveTimerRef = useRef(null)
     const conversationHydratedRef = useRef(false)
+    const isPinnedToBottomRef = useRef(true)
+    const programmaticScrollRef = useRef(false)
+    const programmaticScrollResetRef = useRef(null)
 
+    const setPinnedToBottom = useCallback((next) => {
+        isPinnedToBottomRef.current = next
+        setIsPinnedToBottom(next)
+    }, [])
 
-    // Handle scroll events to determine if we should auto-scroll
-    const handleScroll = () => {
-        if (!chatMessagesRef.current || !isStreaming) return;
-
-        const {scrollTop, scrollHeight, clientHeight} = chatMessagesRef.current;
-        const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
-
-        if (shouldAutoScroll && !isAtBottom) {
-            setShouldAutoScroll(false);
+    const scheduleProgrammaticScrollReset = useCallback(() => {
+        if (programmaticScrollResetRef.current !== null) {
+            cancelAnimationFrame(programmaticScrollResetRef.current)
         }
-    };
+        programmaticScrollResetRef.current = requestAnimationFrame(() => {
+            programmaticScrollRef.current = false
+            programmaticScrollResetRef.current = null
+        })
+    }, [])
+
+    const scrollToBottom = useCallback((behavior = 'auto') => {
+        const container = chatMessagesRef.current
+        if (!container) return
+        programmaticScrollRef.current = true
+        container.scrollTo({top: container.scrollHeight, behavior})
+        scheduleProgrammaticScrollReset()
+    }, [scheduleProgrammaticScrollReset])
+
+    const syncPinnedStateWithScrollPosition = useCallback(() => {
+        const container = chatMessagesRef.current
+        if (!container) return
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        setPinnedToBottom(distanceFromBottom <= PIN_BOTTOM_THRESHOLD_PX)
+    }, [setPinnedToBottom])
 
     const storageProviderRef = useRef(modelStorage);
     // When no conversationStorage is provided the whole conversation manager
@@ -512,7 +532,8 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         } catch (err) {
             reportStorageError(err)
         }
-    }, [abortActiveStream, reportStorageError])
+        setPinnedToBottom(true)
+    }, [abortActiveStream, reportStorageError, setPinnedToBottom])
 
     // Reset the UI to a brand-new, unsaved conversation (greeting only).
     // When a storage provider is configured the previously-active conversation
@@ -537,7 +558,8 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 reportStorageError(err)
             }
         }
-    }, [abortActiveStream, reportStorageError])
+        setPinnedToBottom(true)
+    }, [abortActiveStream, reportStorageError, setPinnedToBottom])
 
     // One-shot hydration from storage on mount. Skipped entirely when no
     // conversation storage provider has been configured.
@@ -721,21 +743,54 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         ))
     }
 
-    // Set up scroll event listener
     useEffect(() => {
-        const chatMessages = chatMessagesRef.current;
-        if (chatMessages) {
-            chatMessages.addEventListener('scroll', handleScroll);
-            return () => chatMessages.removeEventListener('scroll', handleScroll);
-        }
-    }, []);
+        const chatMessages = chatMessagesRef.current
+        if (!chatMessages) return undefined
 
-    // Handle auto-scrolling when messages change
-    useEffect(() => {
-        if (shouldAutoScroll && messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({behavior: 'smooth'});
+        const handleScroll = () => {
+            if (programmaticScrollRef.current) return
+            syncPinnedStateWithScrollPosition()
         }
-    }, [messages, shouldAutoScroll]);
+
+        chatMessages.addEventListener('scroll', handleScroll)
+        syncPinnedStateWithScrollPosition()
+
+        return () => {
+            chatMessages.removeEventListener('scroll', handleScroll)
+        }
+    }, [syncPinnedStateWithScrollPosition])
+
+    useLayoutEffect(() => {
+        if (!isPinnedToBottomRef.current) return
+        const container = chatMessagesRef.current
+        if (!container) return
+        programmaticScrollRef.current = true
+        container.scrollTop = container.scrollHeight
+        scheduleProgrammaticScrollReset()
+    }, [messages, scheduleProgrammaticScrollReset])
+
+    useEffect(() => {
+        const container = chatMessagesRef.current
+        if (!container || typeof ResizeObserver === 'undefined') return undefined
+
+        const observer = new ResizeObserver(() => {
+            if (!isPinnedToBottomRef.current) return
+            programmaticScrollRef.current = true
+            container.scrollTop = container.scrollHeight
+            scheduleProgrammaticScrollReset()
+        })
+
+        observer.observe(container)
+        return () => observer.disconnect()
+    }, [scheduleProgrammaticScrollReset])
+
+    useEffect(() => {
+        return () => {
+            if (programmaticScrollResetRef.current !== null) {
+                cancelAnimationFrame(programmaticScrollResetRef.current)
+            }
+        }
+    }, [])
 
     // Initialize Bootstrap tooltips for pending attachments
     useEffect(() => {
@@ -780,6 +835,8 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             }])
             return
         }
+
+        setPinnedToBottom(true)
 
         const newMessages = [...messages, {
             content: userMessage,
@@ -1102,19 +1159,34 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 </div>
             </div>
 
-            <div className="flex-grow-1 py-2 overflow-auto" style={{scrollBehavior: 'smooth', overscrollBehavior: 'contain'}} ref={chatMessagesRef}>
-                {messages.map((message) => (
-                    <Message
-                        key={message.id}
-                        message={message}
-                        onCopy={copyToClipboard}
-                        onDelete={deleteMessage}
-                        onToggleView={toggleMessageView}
-                        onToggleAttachments={toggleMessageAttachments}
-                        getIconForType={getIconForType}
-                    />
-                ))}
-                <div ref={messagesEndRef} />
+            <div className="chat-messages-shell flex-grow-1 position-relative">
+                <div className="chat-messages py-2" ref={chatMessagesRef}>
+                    {messages.map((message) => (
+                        <Message
+                            key={message.id}
+                            message={message}
+                            onCopy={copyToClipboard}
+                            onDelete={deleteMessage}
+                            onToggleView={toggleMessageView}
+                            onToggleAttachments={toggleMessageAttachments}
+                            getIconForType={getIconForType}
+                        />
+                    ))}
+                </div>
+                {!isPinnedToBottom && messages.length > 0 && (
+                    <button
+                        type="button"
+                        className="btn btn-primary rounded-circle chat-scroll-down-btn"
+                        onClick={() => {
+                            setPinnedToBottom(true)
+                            scrollToBottom('smooth')
+                        }}
+                        title="Scroll to latest"
+                        aria-label="Scroll to latest"
+                    >
+                        <i className="fas fa-arrow-down"></i>
+                    </button>
+                )}
             </div>
 
             {showAttachmentBar && (
