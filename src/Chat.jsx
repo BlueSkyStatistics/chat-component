@@ -907,6 +907,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 abortControllerRef.current.signal,
                 {
                     onToolCallEvent: upsertToolCallTrace,
+                    conversationId: activeConversationId,
                 }
             )
         } catch (error) {

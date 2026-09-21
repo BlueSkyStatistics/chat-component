@@ -262,6 +262,7 @@ const streamResponses = async ({
                         ...statusEvent,
                     })
                 },
+                conversationId: callbacks.conversationId,
             })
             const status = execution?.ok === false ? 'failed' : 'succeeded'
             const resultPayload = execution?.ok === false

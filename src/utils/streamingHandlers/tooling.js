@@ -61,6 +61,7 @@ export const executeRegisteredToolCall = async (toolCall, options = {}) => {
             arguments: argumentsObject,
             updateStatus,
             toolCall,
+            conversationId: options.conversationId,
         })
         return result
     } catch (error) {
