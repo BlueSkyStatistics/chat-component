@@ -20,8 +20,24 @@ import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} f
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
 const DEFAULT_TITLE = 'New Conversation'
+const DEFAULT_TITLE_MAX_CHARS = 20
 const AUTOSAVE_DEBOUNCE_MS = 500
 const PIN_BOTTOM_THRESHOLD_PX = 80
+
+// Array.from splits on code points so an emoji is never cut in half.
+const truncateTitle = (title, maxChars) => {
+    const chars = Array.from(title)
+    return chars.length > maxChars ? `${chars.slice(0, maxChars).join('')}...` : title
+}
+
+// The empty assistant message added on send (so there is something to stream
+// into) and any stopped/failed stream leave a contentless bubble behind. Those
+// are not rendered; a "Thinking..." indicator stands in while streaming.
+const isEmptyAssistantMessage = (message) =>
+    message?.role === 'assistant'
+    && !message.isToolCallTrace
+    && !message.content
+    && !(message.attachments && message.attachments.length)
 
 const makeGreetingMessage = () => ({
     content: 'Hi, how can I help you?',
@@ -1028,15 +1044,16 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     return (
         <>
             <div className="d-flex flex-nowrap justify-content-between align-items-center border-bottom py-1 px-3">
-                <div className="d-flex align-items-center gap-1">
+                <div className="d-flex align-items-center gap-1 chat-header-group">
                     {hasConversationStorage && (
                         <>
                             <button
-                                className="btn btn-sm btn-link p-1 m-0"
+                                className="btn btn-sm chat-conversations-btn"
                                 onClick={() => setShowConversations(true)}
                                 title="Conversations"
+                                aria-label="Conversations"
                             >
-                                <i className="fas fa-comments"></i>
+                                Conversations
                             </button>
                             <button
                                 className="btn btn-sm btn-link p-1 m-0"
@@ -1058,16 +1075,15 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                     </button>)}
                     {hasConversationStorage && conversationMeta.title && (
                         <span
-                            className="small text-truncate ms-2 d-none d-md-inline"
-                            style={{maxWidth: '220px'}}
+                            className="text-truncate ms-2 chat-conversation-title"
                             title={conversationMeta.title}
                         >
-                            {conversationMeta.title}
+                            {truncateTitle(conversationMeta.title, options?.titleMaxChars ?? DEFAULT_TITLE_MAX_CHARS)}
                         </span>
                     )}
                 </div>
 
-                <div className="d-flex align-items-center gap-2">
+                <div className="d-flex align-items-center gap-2 chat-header-group">
                     {hasTier1Storage && (
                         <button
                             type="button"
@@ -1086,13 +1102,15 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                         </button>
                     )}
                     {selectedModel && (
-                        <span className="d-flex flex-column align-items-end lh-sm text-end">
-                            <span>{selectedModel.name}</span>
-                            <span className="small text-muted">
-                                {credentials.find((credential) => credential.id === selectedModel.credentialId)
-                                    ? credentials.find((credential) => credential.id === selectedModel.credentialId).label?.trim() || 'Managed credentials'
-                                    : 'Unassigned / external'}
-                            </span>
+                        <span className="d-flex flex-column align-items-end lh-sm chat-model-info">
+                            <span className="chat-model-name" title={selectedModel.name}>{selectedModel.name}</span>
+                            {(options?.showCredentialLabel ?? true) && (
+                                <span className="small text-muted">
+                                    {credentials.find((credential) => credential.id === selectedModel.credentialId)
+                                        ? credentials.find((credential) => credential.id === selectedModel.credentialId).label?.trim() || 'Managed credentials'
+                                        : 'Unassigned / external'}
+                                </span>
+                            )}
                         </span>
                     )}
                     <div className="dropdown">
@@ -1163,16 +1181,26 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             <div className="chat-messages-shell flex-grow-1 position-relative">
                 <div className="chat-messages py-2" ref={chatMessagesRef}>
                     {messages.map((message) => (
-                        <Message
-                            key={message.id}
-                            message={message}
-                            onCopy={copyToClipboard}
-                            onDelete={deleteMessage}
-                            onToggleView={toggleMessageView}
-                            onToggleAttachments={toggleMessageAttachments}
-                            getIconForType={getIconForType}
-                        />
+                        isEmptyAssistantMessage(message) ? null : (
+                            <Message
+                                key={message.id}
+                                message={message}
+                                onCopy={copyToClipboard}
+                                onDelete={deleteMessage}
+                                onToggleView={toggleMessageView}
+                                onToggleAttachments={toggleMessageAttachments}
+                                getIconForType={getIconForType}
+                            />
+                        )
                     ))}
+                    {isStreaming && isEmptyAssistantMessage(messages[messages.length - 1]) && (
+                        <div className="message assistant chat-thinking" role="status" aria-live="polite">
+                            <span className="chat-thinking-dots" aria-hidden="true">
+                                <span></span><span></span><span></span>
+                            </span>
+                            <span>Thinking...</span>
+                        </div>
+                    )}
                 </div>
                 {!isPinnedToBottom && messages.length > 0 && (
                     <button
