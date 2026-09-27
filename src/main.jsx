@@ -37,6 +37,9 @@ let root = null;
 //                           host application's UI.
 //   options               - optional UI settings. `addModelsAllowed` defaults
 //                           to true and controls credential/model mutations.
+//                           `showCredentialLabel` (default true) shows the credential name
+//                           under the model name in the header. `titleMaxChars` (default 20)
+//                           caps the conversation title shown in the header.
 //   messageStreamingHandler - optional custom handler. It receives a resolved
 //                           runtime model with legacy endpoint/apiKey fields
 //                           where applicable plus its `credential` metadata.
