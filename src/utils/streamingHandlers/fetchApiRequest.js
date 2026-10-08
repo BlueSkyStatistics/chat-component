@@ -1,4 +1,5 @@
 import {executeRegisteredToolCall, getRegisteredModelTools} from './tooling'
+import {createToolTurnGuard} from './toolTurnGuard'
 
 const asToolCallId = (toolCall, index) => toolCall?.id || `tool-call-${index}`
 const MAX_TOOL_ROUNDS = 6
@@ -19,6 +20,7 @@ const apiCallStreaming = async (
 
     let requestMessages = Array.isArray(messages) ? [...messages] : []
     let finalAssistantResponse = ''
+    const toolGuard = createToolTurnGuard()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const toolCallState = new Map()
@@ -132,9 +134,10 @@ const apiCallStreaming = async (
         }
 
         const toolResultMessages = []
+        const imageEntries = []
         for (const toolCall of toolCalls) {
             emitToolEvent({...toolCall, status: 'running'})
-            const execution = await executeRegisteredToolCall(toolCall, {
+            const execution = toolGuard.check(toolCall) || await executeRegisteredToolCall(toolCall, {
                 onStatusChange: (statusEvent) => {
                     emitToolEvent({
                         ...toolCall,
@@ -143,29 +146,30 @@ const apiCallStreaming = async (
                 },
                 conversationId: callbacks.conversationId,
             })
-            const status = execution?.ok === false ? 'failed' : 'succeeded'
-            const resultPayload = execution?.ok === false
-                ? {ok: false, error: execution.error || 'Tool call failed.'}
-                : execution
-            const formattedResult = JSON.stringify(resultPayload)
+            const shaped = toolGuard.shape(toolCall, execution)
             emitToolEvent({
                 ...toolCall,
-                result: formattedResult,
-                error: status === 'failed' ? (execution?.error || 'Tool call failed.') : '',
-                status,
+                result: shaped.text,
+                error: shaped.error,
+                status: shaped.failed ? 'failed' : 'succeeded',
             })
             toolResultMessages.push({
                 role: 'tool',
                 tool_call_id: toolCall.callId,
-                content: formattedResult,
+                content: shaped.text,
             })
+            imageEntries.push({toolCall, images: shaped.images})
         }
+        // Tool messages must directly follow the assistant tool_calls message,
+        // so images travel in a user message appended after all of them.
+        const imageMessage = toolGuard.makeImageMessage(imageEntries)
 
-        requestMessages = [
+        requestMessages = toolGuard.compactToolHistory([
             ...requestMessages,
             assistantToolCallMessage,
             ...toolResultMessages,
-        ]
+            ...(imageMessage ? [imageMessage] : []),
+        ])
     }
 
     throw new Error(`Exceeded maximum tool-calling rounds (${MAX_TOOL_ROUNDS}).`)

@@ -15,6 +15,7 @@ import {
     makeLegacyModelId,
     migrateModelConfiguration,
 } from './utils/modelConfig'
+import {ATTACHMENT_PAGE_CHARS, paginateAttachmentResult} from './utils/attachmentPaging'
 import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
@@ -461,7 +462,9 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     useEffect(() => {
         const unregister = registerModelTool({
             name: 'fetchAttachmentById',
-            description: 'Fetch the full content of a chat attachment by attachment id.',
+            description: 'Fetch the content of a chat attachment by attachment id. Large text, code and table ' +
+                'attachments are returned in pages: if the result has hasMore=true, call again with offset=nextOffset ' +
+                'only if you really need the rest. Charts are returned as an image and cannot be paged.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -469,16 +472,24 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                         type: 'string',
                         description: 'The attachment id from the attachment reference list.',
                     },
+                    offset: {
+                        type: 'integer',
+                        minimum: 0,
+                        description: 'Character offset to start from (text/code/table only). Default 0.',
+                    },
+                    limit: {
+                        type: 'integer',
+                        minimum: 1,
+                        description: `Max characters to return (text/code/table only). Default and maximum ${ATTACHMENT_PAGE_CHARS}.`,
+                    },
                 },
                 required: ['attachmentId'],
                 additionalProperties: false,
             },
             execute: async ({arguments: toolArguments, updateStatus}) => {
                 updateStatus('running', {result: 'Looking up attachment...'});
-                const {attachmentId} = toolArguments
-                // Emulated network / processing delay for testing waiting behavior
-                // await new Promise((resolve) => setTimeout(resolve, 3000))
-                return fetchAttachmentById(attachmentId)
+                const {attachmentId, offset, limit} = toolArguments
+                return paginateAttachmentResult(fetchAttachmentById(attachmentId), {offset, limit})
             },
         })
         return () => unregister()
