@@ -10,6 +10,23 @@ const parseToolArguments = (rawArguments) => {
     }
 }
 
+// A tool may return `attachments: [{id, type, data, metadata, output?}]` (same shape as
+// payloads passed to electronApi.sendOutputToChat). They are handed to the host chat via
+// options.onAttachments so they get stored on the current user message exactly like a manual
+// attachment (persisted, shown as chips, resolvable by fetchAttachmentById). The model only
+// receives a lightweight manifest here, never the bulky data; it fetches content by id.
+const applyResultAttachments = (result, options) => {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.attachments)) return result
+    const {attachments, ...rest} = result
+    if (attachments.length === 0 || typeof options.onAttachments !== 'function') return rest
+    options.onAttachments(attachments)
+    return {
+        ...rest,
+        attached: attachments.map((a) => ({id: a.id, type: a.type, title: a.metadata?.title || a.type})),
+        note: 'Attached to the conversation. Call fetchAttachmentById with each id to read its content.',
+    }
+}
+
 export const getRegisteredModelTools = () => {
     return [...chatToolRegistry.values()].map((tool) => ({
         type: 'function',
@@ -63,7 +80,7 @@ export const executeRegisteredToolCall = async (toolCall, options = {}) => {
             toolCall,
             conversationId: options.conversationId,
         })
-        return result
+        return applyResultAttachments(result, options)
     } catch (error) {
         return {
             ok: false,

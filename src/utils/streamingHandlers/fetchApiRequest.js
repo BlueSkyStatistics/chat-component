@@ -145,6 +145,7 @@ const apiCallStreaming = async (
                     })
                 },
                 conversationId: callbacks.conversationId,
+                onAttachments: callbacks.onAttachments,
             })
             const shaped = toolGuard.shape(toolCall, execution)
             emitToolEvent({

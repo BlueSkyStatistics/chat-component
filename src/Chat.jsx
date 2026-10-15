@@ -311,6 +311,32 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         })
     }, [])
 
+    // Adds tool-supplied attachments to an existing user message, as if the user attached
+    // them manually. Skips ids already present anywhere in the conversation.
+    const attachToMessage = useCallback((messageId, incoming) => {
+        if (!Array.isArray(incoming) || incoming.length === 0) return
+        const normalized = incoming.map((element) => ({
+            id: element.id !== undefined ? element.id : Date.now() + Math.random(),
+            type: element.type,
+            data: element.data,
+            metadata: element.metadata || {},
+            output: element.output || null,
+            initialMessage: element.initialMessage,
+        }))
+        // Keep the ref current synchronously so a fetchAttachmentById in the same
+        // tool round can already resolve the new ids.
+        const apply = (prev) => {
+            const known = new Set(prev.flatMap((m) => (Array.isArray(m.attachments) ? m.attachments : []).map((a) => String(a.id))))
+            const fresh = normalized.filter((a) => !known.has(String(a.id)))
+            if (fresh.length === 0) return prev
+            return prev.map((m) => m.id === messageId
+                ? {...m, attachments: [...(Array.isArray(m.attachments) ? m.attachments : []), ...fresh]}
+                : m)
+        }
+        messagesRef.current = apply(messagesRef.current || [])
+        setMessages(apply)
+    }, [])
+
     const refreshModels = useCallback(async () => {
         const provider = storageProviderRef.current
         const [savedModels, savedModelId, savedCredentials] = await Promise.all([
@@ -865,10 +891,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
         setPinnedToBottom(true)
 
+        const userMessageId = Date.now()
         const newMessages = [...messages, {
             content: userMessage,
             role: 'user',
-            id: Date.now(),
+            id: userMessageId,
             showRaw: false,
             showAttachments: false,
             attachments: pendingAttachments
@@ -934,6 +961,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 abortControllerRef.current.signal,
                 {
                     onToolCallEvent: upsertToolCallTrace,
+                    onAttachments: (attachments) => attachToMessage(userMessageId, attachments),
                     conversationId: activeConversationId,
                 }
             )
