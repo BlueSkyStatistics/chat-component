@@ -5,6 +5,7 @@ import './Chat.css'
 import Settings from './Settings'
 import Conversations from './Conversations'
 import Message from './components/Message'
+import ToolCallGroup from './components/ToolCallGroup'
 import PendingAttachments from './components/PendingAttachments'
 import GuidancePicker from './components/GuidancePicker'
 import QuickPromptsMenu from './components/QuickPromptsMenu'
@@ -39,6 +40,28 @@ const isEmptyAssistantMessage = (message) =>
     && !message.isToolCallTrace
     && !message.content
     && !(message.attachments && message.attachments.length)
+
+// Collapses runs of consecutive tool call traces into one render item so a
+// turn's tool calls show as a single message. Hidden empty assistant
+// placeholders don't break a run. Messages themselves stay one per call.
+const groupMessagesForRender = (messages) => {
+    const items = []
+    let group = null
+    messages.forEach((message) => {
+        if (message?.isToolCallTrace) {
+            if (!group) {
+                group = {type: 'toolGroup', key: `tools-${message.id}`, messages: []}
+                items.push(group)
+            }
+            group.messages.push(message)
+            return
+        }
+        if (isEmptyAssistantMessage(message)) return
+        group = null
+        items.push({type: 'message', key: message.id, message})
+    })
+    return items
+}
 
 const makeGreetingMessage = () => ({
     content: 'Hi, how can I help you?',
@@ -532,6 +555,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
     const deleteMessage = (messageId) => {
         setMessages(messages.filter(msg => msg.id !== messageId))
+    }
+
+    const deleteMessages = (messageIds) => {
+        const ids = new Set(messageIds)
+        setMessages(messages.filter(msg => !ids.has(msg.id)))
     }
 
     // Cancel any in-flight streaming without mutating the message list.
@@ -1219,11 +1247,18 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
             <div className="chat-messages-shell flex-grow-1 position-relative">
                 <div className="chat-messages py-2" ref={chatMessagesRef}>
-                    {messages.map((message) => (
-                        isEmptyAssistantMessage(message) ? null : (
+                    {groupMessagesForRender(messages).map((item) => (
+                        item.type === 'toolGroup' ? (
+                            <ToolCallGroup
+                                key={item.key}
+                                messages={item.messages}
+                                onCopy={copyToClipboard}
+                                onDelete={deleteMessages}
+                            />
+                        ) : (
                             <Message
-                                key={message.id}
-                                message={message}
+                                key={item.key}
+                                message={item.message}
                                 onCopy={copyToClipboard}
                                 onDelete={deleteMessage}
                                 onToggleView={toggleMessageView}
