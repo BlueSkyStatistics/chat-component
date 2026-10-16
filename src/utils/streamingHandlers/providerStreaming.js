@@ -40,7 +40,7 @@ const toResponsesInput = (messages) => {
 
 const toolKeyFromEvent = (event) => event?.item_id || `tool-${event?.output_index ?? -1}`
 const toolKeyFromItem = (item, outputIndex) => item?.id || item?.call_id || `tool-${outputIndex ?? -1}`
-const MAX_TOOL_ROUNDS = 6
+const MAX_TOOL_ROUNDS = 20
 
 // Streams a Responses API request using the renderer's native fetch + SSE
 // parsing. Avoids bundling the OpenAI SDK, whose environment/streaming
