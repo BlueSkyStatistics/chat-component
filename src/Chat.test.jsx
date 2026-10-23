@@ -185,3 +185,60 @@ describe('Chat auto-scroll', () => {
         expect(scrollContainer.scrollTo).toHaveBeenCalledWith({top: scrollContainer.scrollHeight, behavior: 'smooth'})
     })
 })
+describe('Chat tool call visibility', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks()
+        global.ResizeObserver = class {
+            observe() {}
+            disconnect() {}
+        }
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+            cb()
+            return 1
+        })
+        vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        cleanup()
+    })
+
+    const renderChat = (options) => (
+        <Chat
+            modelStorage={makeModelStorage()}
+            conversationStorage={null}
+            onConversationError={() => {}}
+            options={{addModelsAllowed: true, ...options}}
+            messageStreamingHandler={async (_messages, onUpdate, _model, _signal, {onToolCallEvent}) => {
+                onToolCallEvent({callId: 'call-1', name: 'list_dataset_variables', status: 'completed'})
+                onUpdate('done')
+            }}
+        />
+    )
+
+    const sendMessage = async (container) => {
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Send'})).toBeTruthy())
+        await flushPromises()
+        fireEvent.change(screen.getByPlaceholderText('Type a message... (Shift+Enter for new line)'), {
+            target: {value: 'hello'},
+        })
+        fireEvent.click(screen.getByRole('button', {name: 'Send'}))
+        await waitFor(() => expect(container.textContent).toContain('done'))
+    }
+
+    it('shows tool calls by default', async () => {
+        const {container} = render(renderChat())
+        await sendMessage(container)
+        expect(container.querySelector('.tool-call-group')).not.toBeNull()
+    })
+
+    it('hides tool calls when showToolCalls is false and shows them again when re-enabled', async () => {
+        const {container, rerender} = render(renderChat({showToolCalls: false}))
+        await sendMessage(container)
+        expect(container.querySelector('.tool-call-group')).toBeNull()
+
+        rerender(renderChat({showToolCalls: true}))
+        expect(container.querySelector('.tool-call-group')).not.toBeNull()
+        expect(container.textContent).toContain('done')
+    })
+})
