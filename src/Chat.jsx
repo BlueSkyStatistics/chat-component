@@ -44,11 +44,14 @@ const isEmptyAssistantMessage = (message) =>
 // Collapses runs of consecutive tool call traces into one render item so a
 // turn's tool calls show as a single message. Hidden empty assistant
 // placeholders don't break a run. Messages themselves stay one per call.
-const groupMessagesForRender = (messages) => {
+// With showToolCalls off, traces are left out of the render entirely; they
+// stay in state, so turning the option back on shows them again.
+const groupMessagesForRender = (messages, {showToolCalls = true} = {}) => {
     const items = []
     let group = null
     messages.forEach((message) => {
         if (message?.isToolCallTrace) {
+            if (!showToolCalls) return
             if (!group) {
                 group = {type: 'toolGroup', key: `tools-${message.id}`, messages: []}
                 items.push(group)
@@ -1108,6 +1111,16 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
     const tier2SelectedPrompts = tier2Library.prompts.filter((prompt) => tier2SelectedIds.has(prompt.id))
 
+    // Host-controlled via options.showToolCalls (live updates go through
+    // updateChatOptions in main.jsx). With tool calls hidden, a turn that is
+    // busy running tools has nothing visible yet, so keep "Thinking..." up.
+    const showToolCalls = options?.showToolCalls ?? true
+    const lastMessage = messages[messages.length - 1]
+    const showThinking = isStreaming && (
+        isEmptyAssistantMessage(lastMessage)
+        || (!showToolCalls && lastMessage?.isToolCallTrace)
+    )
+
     return (
         <>
             <div className="d-flex flex-nowrap justify-content-between align-items-center border-bottom py-1 px-3">
@@ -1247,7 +1260,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
             <div className="chat-messages-shell flex-grow-1 position-relative">
                 <div className="chat-messages py-2" ref={chatMessagesRef}>
-                    {groupMessagesForRender(messages).map((item) => (
+                    {groupMessagesForRender(messages, {showToolCalls}).map((item) => (
                         item.type === 'toolGroup' ? (
                             <ToolCallGroup
                                 key={item.key}
@@ -1267,7 +1280,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                             />
                         )
                     ))}
-                    {isStreaming && isEmptyAssistantMessage(messages[messages.length - 1]) && (
+                    {showThinking && (
                         <div className="message assistant chat-thinking" role="status" aria-live="polite">
                             <span className="chat-thinking-dots" aria-hidden="true">
                                 <span></span><span></span><span></span>
