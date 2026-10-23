@@ -80,6 +80,9 @@ function Conversations({
     const [renamingId, setRenamingId] = useState(null)
     const [renameValue, setRenameValue] = useState('')
     const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+    // Tool call steps are left out of exports unless the user opts in.
+    const [includeToolCalls, setIncludeToolCalls] = useState(false)
+    const exportOptions = {includeToolCalls}
     const fileInputRef = useRef(null)
 
     const reportError = (err, userMessage) => {
@@ -180,7 +183,7 @@ function Conversations({
         try {
             const full = await conversationStorage.getConversation(id)
             if (!full) return
-            exportConversation(full)
+            exportConversation(full, exportOptions)
         } catch (err) {
             reportError(err, 'Failed to export conversation.')
         }
@@ -190,7 +193,7 @@ function Conversations({
         try {
             const full = await conversationStorage.getConversation(id)
             if (!full) return
-            exportConversationAsHtml(full)
+            exportConversationAsHtml(full, exportOptions)
         } catch (err) {
             reportError(err, 'Failed to export conversation as HTML.')
         }
@@ -213,7 +216,7 @@ function Conversations({
                 setError('There are no conversations to export.')
                 return
             }
-            exportAllConversations(toExport)
+            exportAllConversations(toExport, exportOptions)
         } catch (err) {
             reportError(err, 'Failed to export conversations.')
         }
@@ -226,7 +229,7 @@ function Conversations({
                 setError('There are no conversations to export.')
                 return
             }
-            exportAllConversationsAsHtml(toExport)
+            exportAllConversationsAsHtml(toExport, exportOptions)
         } catch (err) {
             reportError(err, 'Failed to export conversations as HTML.')
         }
@@ -322,6 +325,20 @@ function Conversations({
                                 >
                                     <i className="fas fa-file-code me-1"></i> Export All (HTML)
                                 </button>
+                                <div className="form-check form-switch d-flex align-items-center ms-auto mb-0"
+                                     title="Include tool call steps (arguments and results) in exported files">
+                                    <input
+                                        className="form-check-input me-2"
+                                        type="checkbox"
+                                        role="switch"
+                                        id="export-include-tool-calls"
+                                        checked={includeToolCalls}
+                                        onChange={(e) => setIncludeToolCalls(e.target.checked)}
+                                    />
+                                    <label className="form-check-label small" htmlFor="export-include-tool-calls">
+                                        Include tool calls in exports
+                                    </label>
+                                </div>
                                 <input
                                     ref={fileInputRef}
                                     type="file"

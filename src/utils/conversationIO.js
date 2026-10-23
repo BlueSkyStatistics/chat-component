@@ -74,34 +74,50 @@ const sanitizeFilenamePart = (s) => String(s || 'conversation')
     .replace(/^_+|_+$/g, '')
     .slice(0, 40) || 'conversation';
 
+export const isToolCallTraceMessage = (m) => Boolean(m && m.isToolCallTrace);
+
+// Contentless assistant placeholders left behind by a stopped/failed stream
+// (or by a tool round) are hidden in chat, so they are dropped from exports.
+const isEmptyAssistantMessage = (m) => Boolean(m)
+    && m.role === 'assistant'
+    && !m.isToolCallTrace
+    && !m.content
+    && !(Array.isArray(m.attachments) && m.attachments.length);
+
 /**
  * Build an export payload for one or more conversations.
  * Input may be a single conversation or an array.
+ *
+ * Options:
+ *  - includeToolCalls: keep tool call trace messages (default false).
  */
-export const buildExportPayload = (conversations) => {
+export const buildExportPayload = (conversations, {includeToolCalls = false} = {}) => {
     const list = Array.isArray(conversations) ? conversations : [conversations];
     return {
         format: EXPORT_FORMAT,
         version: EXPORT_VERSION,
         exportedAt: Date.now(),
-        conversations: list.map((c) => normalizeConversationForExport(c)),
+        includesToolCalls: Boolean(includeToolCalls),
+        conversations: list.map((c) => normalizeConversationForExport(c, {includeToolCalls})),
     };
 };
 
-const normalizeConversationForExport = (c) => ({
+const normalizeConversationForExport = (c, {includeToolCalls = false} = {}) => ({
     id: c.id,
     title: c.title,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     version: c.version ?? CURRENT_SCHEMA_VERSION,
-    messages: Array.isArray(c.messages) ? c.messages : [],
+    messages: (Array.isArray(c.messages) ? c.messages : []).filter((m) => m
+        && !isEmptyAssistantMessage(m)
+        && (includeToolCalls || !isToolCallTraceMessage(m))),
 });
 
 /**
  * Export a single conversation with a filename derived from its title.
  */
-export const exportConversation = (conversation) => {
-    const payload = buildExportPayload([conversation]);
+export const exportConversation = (conversation, options) => {
+    const payload = buildExportPayload([conversation], options);
     const filename = `conversation-${sanitizeFilenamePart(conversation?.title)}.json`;
     downloadJson(payload, filename);
 };
@@ -109,8 +125,8 @@ export const exportConversation = (conversation) => {
 /**
  * Export many conversations into one file.
  */
-export const exportAllConversations = (conversations) => {
-    const payload = buildExportPayload(conversations);
+export const exportAllConversations = (conversations, options) => {
+    const payload = buildExportPayload(conversations, options);
     const filename = `conversations-${new Date().toISOString().slice(0, 10)}.json`;
     downloadJson(payload, filename);
 };
@@ -157,9 +173,12 @@ const encodeJsonForScriptTag = (obj) => JSON.stringify(obj)
  * attachments) in the main area. The original export envelope is embedded
  * verbatim inside a `<script type="application/json">` tag so the file also
  * works as a portable archive.
+ *
+ * Consecutive tool call traces are rendered as one collapsible group, like in
+ * the chat. They are only present when `includeToolCalls` is set.
  */
-export const buildConversationsHtml = (conversations) => {
-    const payload = buildExportPayload(conversations);
+export const buildConversationsHtml = (conversations, options) => {
+    const payload = buildExportPayload(conversations, options);
     const list = payload.conversations;
     const docTitle = list.length === 1
         ? `Conversation: ${list[0].title || 'Untitled'}`
@@ -227,6 +246,36 @@ export const buildConversationsHtml = (conversations) => {
       .att-html { padding: 8px; overflow-x: auto; }
       .att-html table { border-collapse: collapse; }
       .att-html th, .att-html td { border: 1px solid #d0d7de; padding: 4px 8px; }
+      .tools { padding: 10px 16px; }
+      .tools > summary { cursor: pointer; color: #57606a; font-size: 13px; font-weight: 600; }
+      .tools-failed { color: #cf222e; }
+      .tool { border: 1px solid #d0d7de; border-radius: 6px; margin-top: 8px; }
+      .tool > summary {
+        cursor: pointer; padding: 6px 10px; font-size: 13px;
+        display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      }
+      .tool-name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .tool-status {
+        font-size: 11px; padding: 1px 6px; border-radius: 10px;
+        background: #eaeef2; color: #57606a;
+      }
+      .tool-status-succeeded { background: #dafbe1; color: #1a7f37; }
+      .tool-status-failed { background: #ffebe9; color: #cf222e; }
+      .tool-status-running, .tool-status-requesting { background: #fff8c5; color: #9a6700; }
+      .tool-body { padding: 0 10px 10px; }
+      .tool-label { font-size: 12px; color: #57606a; margin: 8px 0 4px; font-weight: 600; }
+      .tool-body pre {
+        margin: 0; background: #0d1117; color: #e6edf3; padding: 10px; border-radius: 6px;
+        overflow: auto; font-size: 12px; max-height: 360px; white-space: pre-wrap; word-break: break-word;
+      }
+      @media (prefers-color-scheme: dark) {
+        .tool { border-color: #30363d; }
+        .tools > summary, .tool-label { color: #8b949e; }
+        .tool-status { background: #21262d; color: #8b949e; }
+        .tool-status-succeeded { background: #2ea04326; color: #3fb950; }
+        .tool-status-failed { background: #f8514926; color: #f85149; }
+        .tool-status-running, .tool-status-requesting { background: #bb800926; color: #d29922; }
+      }
       @media (prefers-color-scheme: dark) {
         body { background: #0d1117; color: #e6edf3; }
         .sidebar { background: #161b22; border-color: #30363d; }
@@ -297,6 +346,63 @@ export const buildConversationsHtml = (conversations) => {
           }
           return '<div class="att">' + titleHtml + '</div>';
         }
+        function formatStructured(value) {
+          if (value == null) return '';
+          if (typeof value === 'string') {
+            var trimmed = value.trim();
+            if (!trimmed) return '';
+            try { return JSON.stringify(JSON.parse(trimmed), null, 2); } catch (e) { return value; }
+          }
+          try { return JSON.stringify(value, null, 2); } catch (e) { return String(value); }
+        }
+        function renderToolCall(m) {
+          var tc = (m && m.toolCall) || {};
+          var status = String(tc.status || 'requested');
+          var args = formatStructured(tc.arguments);
+          var error = formatStructured(tc.error);
+          var result = error || formatStructured(tc.result) ||
+            (status === 'failed' ? '(error unavailable)' : '(no result)');
+          return '<details class="tool"><summary>' +
+            '<span class="tool-name">' + escapeHtml(tc.name || 'Function call') + '</span>' +
+            '<span class="tool-status tool-status-' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>' +
+            '</summary><div class="tool-body">' +
+            '<div class="tool-label">Arguments</div><pre>' + escapeHtml(args || '(none)') + '</pre>' +
+            '<div class="tool-label">' + (error ? 'Error' : 'Result') + '</div><pre>' + escapeHtml(result) + '</pre>' +
+            '</div></details>';
+        }
+        function renderToolGroup(group) {
+          var failed = 0;
+          for (var i = 0; i < group.length; i++) {
+            if (group[i].toolCall && group[i].toolCall.status === 'failed') failed++;
+          }
+          return '<article class="msg msg-assistant msg-tools"><details class="tools"><summary>' +
+            group.length + ' tool call' + (group.length === 1 ? '' : 's') +
+            (failed ? ' <span class="tools-failed">\u00b7 ' + failed + ' failed</span>' : '') +
+            '</summary>' + group.map(renderToolCall).join('') + '</details></article>';
+        }
+        // Collapses runs of consecutive tool call traces into one item, the
+        // same way the chat shows them.
+        function renderMessages(msgs) {
+          var out = [];
+          var group = null;
+          for (var i = 0; i < msgs.length; i++) {
+            var m = msgs[i];
+            if (m && m.isToolCallTrace) {
+              if (!group) group = [];
+              group.push(m);
+              continue;
+            }
+            if (group) { out.push(renderToolGroup(group)); group = null; }
+            out.push(renderMessage(m));
+          }
+          if (group) out.push(renderToolGroup(group));
+          return out.join('');
+        }
+        function countChatMessages(msgs) {
+          var n = 0;
+          for (var i = 0; i < msgs.length; i++) if (!(msgs[i] && msgs[i].isToolCallTrace)) n++;
+          return n;
+        }
         function renderMessage(m) {
           var role = (m && m.role) || 'assistant';
           var atts = Array.isArray(m && m.attachments) ? m.attachments : [];
@@ -314,7 +420,7 @@ export const buildConversationsHtml = (conversations) => {
         function renderSidebar(activeId) {
           var sidebar = document.getElementById('conv-list');
           sidebar.innerHTML = conversations.map(function (c, i) {
-            var msgCount = Array.isArray(c.messages) ? c.messages.length : 0;
+            var msgCount = countChatMessages(Array.isArray(c.messages) ? c.messages : []);
             var id = c.id || ('idx-' + i);
             return '<a href="#" data-id="' + escapeHtml(id) + '" class="conv' +
               (id === activeId ? ' conv-active' : '') + '">' +
@@ -328,11 +434,12 @@ export const buildConversationsHtml = (conversations) => {
           var content = document.getElementById('conv-content');
           if (!c) { content.innerHTML = '<p class="empty">Select a conversation to view it.</p>'; return; }
           var msgs = Array.isArray(c.messages) ? c.messages : [];
+          var msgCount = countChatMessages(msgs);
           content.innerHTML =
             '<header class="conv-header"><h2>' + escapeHtml(c.title || 'Untitled') + '</h2>' +
-            '<p class="conv-sub">' + msgs.length + ' message' + (msgs.length === 1 ? '' : 's') +
+            '<p class="conv-sub">' + msgCount + ' message' + (msgCount === 1 ? '' : 's') +
             (c.updatedAt ? ' \u00b7 updated ' + escapeHtml(formatDate(c.updatedAt)) : '') + '</p></header>' +
-            msgs.map(renderMessage).join('');
+            renderMessages(msgs);
           content.scrollTop = 0;
         }
         function selectConversation(id) {
@@ -400,8 +507,8 @@ export const buildConversationsHtml = (conversations) => {
 /**
  * Export a single conversation as a self-contained HTML viewer.
  */
-export const exportConversationAsHtml = (conversation) => {
-    const html = buildConversationsHtml([conversation]);
+export const exportConversationAsHtml = (conversation, options) => {
+    const html = buildConversationsHtml([conversation], options);
     const filename = `conversation-${sanitizeFilenamePart(conversation?.title)}.html`;
     downloadHtml(html, filename);
 };
@@ -409,8 +516,8 @@ export const exportConversationAsHtml = (conversation) => {
 /**
  * Export many conversations into a single self-contained HTML viewer.
  */
-export const exportAllConversationsAsHtml = (conversations) => {
-    const html = buildConversationsHtml(conversations);
+export const exportAllConversationsAsHtml = (conversations, options) => {
+    const html = buildConversationsHtml(conversations, options);
     const filename = `conversations-${new Date().toISOString().slice(0, 10)}.html`;
     downloadHtml(html, filename);
 };
