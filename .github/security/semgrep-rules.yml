@@ -1,0 +1,43 @@
+# Project-specific Semgrep rules used by .github/workflows/security-scan.yml
+# alongside the public p/javascript, p/react and p/secrets packs.
+rules:
+- id: react-dangerously-set-inner-html
+  languages: [javascript]
+  severity: ERROR
+  message: Raw HTML rendered with dangerouslySetInnerHTML; sanitize with DOMPurify first
+  pattern: <$EL dangerouslySetInnerHTML={...} />
+- id: credentials-in-localstorage
+  languages: [javascript]
+  severity: WARNING
+  message: Credentials persisted to localStorage in plain text
+  patterns:
+    - pattern: localStorage.setItem($K, $V)
+    - metavariable-regex: {metavariable: $K, regex: (?i).*(cred|apikey|api_key|token|secret|password).*}
+- id: unpinned-cdn-script
+  languages: [generic]
+  severity: WARNING
+  message: Remote script loaded without a pinned version or Subresource Integrity
+  pattern-regex: <script src="https?://[^"]+"></script>
+  paths: {include: ['*.js','*.jsx','*.html']}
+- id: electron-window-open-node-integration
+  languages: [javascript]
+  severity: ERROR
+  message: window.open grants nodeIntegration / disables contextIsolation for the child window
+  patterns:
+    - pattern: window.open($A, $B, $FEAT)
+    - metavariable-regex: {metavariable: $FEAT, regex: .*nodeIntegration=yes.*}
+- id: hardcoded-crypto-key
+  languages: [javascript]
+  severity: ERROR
+  message: Hardcoded encryption key fallback
+  pattern-regex: (?i)(ENC_KEY|ENCRYPTION_KEY|SHARED_KEY)\s*=\s*[^;\n]*['"][0-9a-f]{32,}['"]
+- id: hardcoded-telemetry-token
+  languages: [javascript]
+  severity: ERROR
+  message: Hardcoded telemetry/API token in client code
+  pattern-regex: (?i)(token|api_secret|API_SECRET)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}['"]
+- id: password-on-command-line
+  languages: [generic]
+  severity: ERROR
+  message: Password passed literally on a command line in a committed script
+  pattern-regex: --password\s+"[^"$][^"]+"
