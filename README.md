@@ -141,6 +141,34 @@ storage provider (for example a localStorage quota-exceeded error). Use it to
 surface errors in your host UI; when omitted, errors are only logged to the
 console.
 
+### Runtime options
+
+The fifth argument of `initChatComponent` is an `options` object
+(`addModelsAllowed`, `showCredentialLabel`, `titleMaxChars`, `showToolCalls`).
+To change options after mounting, call `updateChatOptions` with the keys to
+change. It merges them into the current options and re-renders the mounted
+chat in place, so the open conversation, its messages and the input box keep
+their state:
+
+```javascript
+import {initChatComponent, updateChatOptions} from '@bluesky/chat';
+
+initChatComponent('chat-container', myModelStorage, myConversationStorage, onError,
+  {addModelsAllowed: true, showToolCalls: false});
+
+// later, e.g. from the host app's settings screen
+updateChatOptions({showToolCalls: true});
+```
+
+`showToolCalls` (default `true`) controls whether tool call steps are shown in
+the conversation. Hidden tool calls are only left out of the view; they stay in
+the conversation and reappear when the option is turned back on. While a turn
+is running tools with the option off, the "Thinking..." indicator stays up.
+
+`updateChatOptions` is also returned by `initChatComponent`. Note that calling
+`initChatComponent` again replaces the options wholesale with the ones it is
+given.
+
 ### Export format
 
 All exports use the following JSON structure:

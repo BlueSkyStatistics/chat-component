@@ -19,6 +19,29 @@ import {
 
 // Store the root instance
 let root = null;
+// Props of the last render, so updateChatOptions can re-render the same tree
+// with only `options` changed. React keeps Chat's state (messages, open
+// conversation, input) because the component type and position don't change.
+let chatProps = null;
+
+const renderChat = () => {
+  root.render(
+    <React.StrictMode>
+      <Chat {...chatProps} />
+    </React.StrictMode>
+  );
+}
+
+// Merge a partial options object into the mounted chat's options and
+// re-render. Use it for settings the host lets users change at runtime, e.g.
+// updateChatOptions({showToolCalls: false}). Returns the merged options, or
+// null if the chat has not been initialized yet.
+function updateChatOptions(patch = {}) {
+  if (!root || !chatProps) return null
+  chatProps = {...chatProps, options: {...chatProps.options, ...patch}}
+  renderChat()
+  return chatProps.options
+}
 
 // Initialize the chat component inside a DOM container.
 //
@@ -40,6 +63,9 @@ let root = null;
 //                           `showCredentialLabel` (default true) shows the credential name
 //                           under the model name in the header. `titleMaxChars` (default 20)
 //                           caps the conversation title shown in the header.
+//                           `showToolCalls` (default true) shows tool call steps
+//                           in the conversation; change it at runtime with
+//                           updateChatOptions().
 //   messageStreamingHandler - optional custom handler. It receives a resolved
 //                           runtime model with legacy endpoint/apiKey fields
 //                           where applicable plus its `credential` metadata.
@@ -67,22 +93,18 @@ function initChatComponent(
     if (!root) {
       root = ReactDOM.createRoot(container);
     }
-    const modelStorageProvider = modelStorage || new LocalStorageProvider()
-    root.render(
-      <React.StrictMode>
-        <Chat
-          modelStorage={modelStorageProvider}
-          conversationStorage={conversationStorage}
-          onConversationError={onConversationError}
-          options={options}
-          messageStreamingHandler={messageStreamingHandler}
-          tier1PromptStorage={tier1PromptStorage}
-          tier2PromptStorage={tier2PromptStorage}
-        />
-      </React.StrictMode>
-    );
+    chatProps = {
+      modelStorage: modelStorage || new LocalStorageProvider(),
+      conversationStorage,
+      onConversationError,
+      options,
+      messageStreamingHandler,
+      tier1PromptStorage,
+      tier2PromptStorage,
+    }
+    renderChat()
   }
-  return {getRegisteredModelTools, executeRegisteredToolCall, registerModelTool}
+  return {getRegisteredModelTools, executeRegisteredToolCall, registerModelTool, updateChatOptions}
 }
 
 // Development mode: opt in to the bundled localStorage conversation provider
@@ -93,6 +115,7 @@ function initChatComponent(
 
 export {
   initChatComponent,
+  updateChatOptions,
   ModelStorageInterface,
   LocalStorageProvider,
   ConversationStorageInterface,
