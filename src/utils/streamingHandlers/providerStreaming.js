@@ -1,6 +1,7 @@
 import {getAzureAccessToken} from '../providers/azureAuth'
 import {apiCallStreaming} from './fetchApiRequest'
 import {executeRegisteredToolCall, getRegisteredModelToolsForResponsesAPI} from './tooling'
+import {createToolTurnGuard} from './toolTurnGuard'
 
 const normalizeRole = (role) => {
     if (['system', 'user', 'assistant', 'developer'].includes(role)) return role
@@ -39,7 +40,7 @@ const toResponsesInput = (messages) => {
 
 const toolKeyFromEvent = (event) => event?.item_id || `tool-${event?.output_index ?? -1}`
 const toolKeyFromItem = (item, outputIndex) => item?.id || item?.call_id || `tool-${outputIndex ?? -1}`
-const MAX_TOOL_ROUNDS = 6
+const MAX_TOOL_ROUNDS = 20
 
 // Streams a Responses API request using the renderer's native fetch + SSE
 // parsing. Avoids bundling the OpenAI SDK, whose environment/streaming
@@ -62,6 +63,7 @@ const streamResponses = async ({
     let finalResponseText = ''
     let pendingInput = toResponsesInput(messages)
     let previousResponseId = null
+    const toolGuard = createToolTurnGuard()
 
     const handleEvent = (dataJson, state) => {
         let event
@@ -252,10 +254,11 @@ const streamResponses = async ({
         }
 
         const toolOutputs = []
+        const imageEntries = []
         for (const toolCall of state.toolCalls.values()) {
             if (toolCall.status !== 'requested') continue
             emitToolEvent({...toolCall, status: 'running'})
-            const execution = await executeRegisteredToolCall(toolCall, {
+            const execution = toolGuard.check(toolCall) || await executeRegisteredToolCall(toolCall, {
                 onStatusChange: (statusEvent) => {
                     emitToolEvent({
                         ...toolCall,
@@ -263,24 +266,24 @@ const streamResponses = async ({
                     })
                 },
                 conversationId: callbacks.conversationId,
+                onAttachments: callbacks.onAttachments,
             })
-            const status = execution?.ok === false ? 'failed' : 'succeeded'
-            const resultPayload = execution?.ok === false
-                ? {ok: false, error: execution.error || 'Tool call failed.'}
-                : execution
-            const formattedResult = JSON.stringify(resultPayload)
+            const shaped = toolGuard.shape(toolCall, execution)
             emitToolEvent({
                 ...toolCall,
-                result: formattedResult,
-                error: status === 'failed' ? (execution?.error || 'Tool call failed.') : '',
-                status,
+                result: shaped.text,
+                error: shaped.error,
+                status: shaped.failed ? 'failed' : 'succeeded',
             })
             toolOutputs.push({
                 type: 'function_call_output',
                 call_id: toolCall.callId,
-                output: formattedResult,
+                output: shaped.text,
             })
+            imageEntries.push({toolCall, images: shaped.images})
         }
+        const imageMessage = toolGuard.makeImageMessage(imageEntries, {responsesApi: true})
+        if (imageMessage && toolOutputs.length > 0) toolOutputs.push(imageMessage)
 
         if (toolOutputs.length === 0) {
             return

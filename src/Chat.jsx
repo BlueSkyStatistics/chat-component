@@ -5,6 +5,7 @@ import './Chat.css'
 import Settings from './Settings'
 import Conversations from './Conversations'
 import Message from './components/Message'
+import ToolCallGroup from './components/ToolCallGroup'
 import PendingAttachments from './components/PendingAttachments'
 import GuidancePicker from './components/GuidancePicker'
 import QuickPromptsMenu from './components/QuickPromptsMenu'
@@ -15,6 +16,7 @@ import {
     makeLegacyModelId,
     migrateModelConfiguration,
 } from './utils/modelConfig'
+import {ATTACHMENT_PAGE_CHARS, paginateAttachmentResult} from './utils/attachmentPaging'
 import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
@@ -38,6 +40,28 @@ const isEmptyAssistantMessage = (message) =>
     && !message.isToolCallTrace
     && !message.content
     && !(message.attachments && message.attachments.length)
+
+// Collapses runs of consecutive tool call traces into one render item so a
+// turn's tool calls show as a single message. Hidden empty assistant
+// placeholders don't break a run. Messages themselves stay one per call.
+const groupMessagesForRender = (messages) => {
+    const items = []
+    let group = null
+    messages.forEach((message) => {
+        if (message?.isToolCallTrace) {
+            if (!group) {
+                group = {type: 'toolGroup', key: `tools-${message.id}`, messages: []}
+                items.push(group)
+            }
+            group.messages.push(message)
+            return
+        }
+        if (isEmptyAssistantMessage(message)) return
+        group = null
+        items.push({type: 'message', key: message.id, message})
+    })
+    return items
+}
 
 const makeGreetingMessage = () => ({
     content: 'Hi, how can I help you?',
@@ -310,6 +334,32 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         })
     }, [])
 
+    // Adds tool-supplied attachments to an existing user message, as if the user attached
+    // them manually. Skips ids already present anywhere in the conversation.
+    const attachToMessage = useCallback((messageId, incoming) => {
+        if (!Array.isArray(incoming) || incoming.length === 0) return
+        const normalized = incoming.map((element) => ({
+            id: element.id !== undefined ? element.id : Date.now() + Math.random(),
+            type: element.type,
+            data: element.data,
+            metadata: element.metadata || {},
+            output: element.output || null,
+            initialMessage: element.initialMessage,
+        }))
+        // Keep the ref current synchronously so a fetchAttachmentById in the same
+        // tool round can already resolve the new ids.
+        const apply = (prev) => {
+            const known = new Set(prev.flatMap((m) => (Array.isArray(m.attachments) ? m.attachments : []).map((a) => String(a.id))))
+            const fresh = normalized.filter((a) => !known.has(String(a.id)))
+            if (fresh.length === 0) return prev
+            return prev.map((m) => m.id === messageId
+                ? {...m, attachments: [...(Array.isArray(m.attachments) ? m.attachments : []), ...fresh]}
+                : m)
+        }
+        messagesRef.current = apply(messagesRef.current || [])
+        setMessages(apply)
+    }, [])
+
     const refreshModels = useCallback(async () => {
         const provider = storageProviderRef.current
         const [savedModels, savedModelId, savedCredentials] = await Promise.all([
@@ -461,7 +511,9 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
     useEffect(() => {
         const unregister = registerModelTool({
             name: 'fetchAttachmentById',
-            description: 'Fetch the full content of a chat attachment by attachment id.',
+            description: 'Fetch the content of a chat attachment by attachment id. Large text, code and table ' +
+                'attachments are returned in pages: if the result has hasMore=true, call again with offset=nextOffset ' +
+                'only if you really need the rest. Charts are returned as an image and cannot be paged.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -469,16 +521,24 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                         type: 'string',
                         description: 'The attachment id from the attachment reference list.',
                     },
+                    offset: {
+                        type: 'integer',
+                        minimum: 0,
+                        description: 'Character offset to start from (text/code/table only). Default 0.',
+                    },
+                    limit: {
+                        type: 'integer',
+                        minimum: 1,
+                        description: `Max characters to return (text/code/table only). Default and maximum ${ATTACHMENT_PAGE_CHARS}.`,
+                    },
                 },
                 required: ['attachmentId'],
                 additionalProperties: false,
             },
             execute: async ({arguments: toolArguments, updateStatus}) => {
                 updateStatus('running', {result: 'Looking up attachment...'});
-                const {attachmentId} = toolArguments
-                // Emulated network / processing delay for testing waiting behavior
-                // await new Promise((resolve) => setTimeout(resolve, 3000))
-                return fetchAttachmentById(attachmentId)
+                const {attachmentId, offset, limit} = toolArguments
+                return paginateAttachmentResult(fetchAttachmentById(attachmentId), {offset, limit})
             },
         })
         return () => unregister()
@@ -495,6 +555,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
     const deleteMessage = (messageId) => {
         setMessages(messages.filter(msg => msg.id !== messageId))
+    }
+
+    const deleteMessages = (messageIds) => {
+        const ids = new Set(messageIds)
+        setMessages(messages.filter(msg => !ids.has(msg.id)))
     }
 
     // Cancel any in-flight streaming without mutating the message list.
@@ -854,10 +919,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
         setPinnedToBottom(true)
 
+        const userMessageId = Date.now()
         const newMessages = [...messages, {
             content: userMessage,
             role: 'user',
-            id: Date.now(),
+            id: userMessageId,
             showRaw: false,
             showAttachments: false,
             attachments: pendingAttachments
@@ -923,6 +989,7 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 abortControllerRef.current.signal,
                 {
                     onToolCallEvent: upsertToolCallTrace,
+                    onAttachments: (attachments) => attachToMessage(userMessageId, attachments),
                     conversationId: activeConversationId,
                 }
             )
@@ -1180,11 +1247,18 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
 
             <div className="chat-messages-shell flex-grow-1 position-relative">
                 <div className="chat-messages py-2" ref={chatMessagesRef}>
-                    {messages.map((message) => (
-                        isEmptyAssistantMessage(message) ? null : (
+                    {groupMessagesForRender(messages).map((item) => (
+                        item.type === 'toolGroup' ? (
+                            <ToolCallGroup
+                                key={item.key}
+                                messages={item.messages}
+                                onCopy={copyToClipboard}
+                                onDelete={deleteMessages}
+                            />
+                        ) : (
                             <Message
-                                key={message.id}
-                                message={message}
+                                key={item.key}
+                                message={item.message}
                                 onCopy={copyToClipboard}
                                 onDelete={deleteMessage}
                                 onToggleView={toggleMessageView}

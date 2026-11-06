@@ -30,6 +30,8 @@ const formatStructured = (value) => {
     }
 }
 
+// One tool call rendered as a collapsible entry: the header shows the tool
+// name and status, the body (collapsed by default) holds arguments and result.
 function ToolCallTrace({toolCall}) {
     if (!toolCall) return null
     const status = toolCall.status || 'requested'
@@ -40,26 +42,21 @@ function ToolCallTrace({toolCall}) {
     const callId = toolCall.callId || 'n/a'
 
     return (
-        <div className="tool-call-card">
-            <div className="tool-call-header">
-                <div className="d-flex align-items-center gap-2 flex-wrap">
-                    <span className="fw-semibold">{name}</span>
-                    <span className={`badge text-bg-${getStatusClass(status)}`}>{status}</span>
-                </div>
+        <details className="tool-call-entry">
+            <summary className="tool-call-entry-header">
+                <span className="fw-semibold text-break">{name}</span>
+                <span className={`badge text-bg-${getStatusClass(status)} ms-auto`}>{status}</span>
+            </summary>
+            <div className="tool-call-entry-body">
                 <div className="small text-muted text-break">id: {callId}</div>
-            </div>
-
-            <details className="tool-call-section">
-                <summary>Request arguments</summary>
-                <pre className="tool-call-pre mb-0">{args || '(none)'}</pre>
-            </details>
-            <details className="tool-call-section">
-                <summary>Result</summary>
-                <pre className="tool-call-pre mb-0">
+                <div className="tool-call-label">Request arguments</div>
+                <pre className="tool-call-pre">{args || '(none)'}</pre>
+                <div className="tool-call-label">Result</div>
+                <pre className="tool-call-pre">
                     {error || result || (status === 'failed' ? '(error unavailable)' : '(pending)')}
                 </pre>
-            </details>
-        </div>
+            </div>
+        </details>
     )
 }
 
