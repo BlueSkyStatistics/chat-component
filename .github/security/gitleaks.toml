@@ -1,0 +1,12 @@
+# Default gitleaks rules plus a narrow allowlist for known false positives.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known false positives"
+regexes = [
+  # featureToggles.js stores base64-encoded feature names (btoa('featureToggles') etc.), not keys.
+  '''ZmVhdHVyZVRvZ2dsZXM=''',
+  '''Y2hhdEludGVncmF0aW9u''',
+  '''b3V0cHV0UHJv''',
+]
