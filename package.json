@@ -24,24 +24,24 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "katex": "^0.19.0",
+    "katex": "^0.19.1",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.2",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@azure/msal-browser": "^5.25.1",
+    "@azure/msal-browser": "^5.28.0",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^18 <19",
     "@types/react-dom": "^18 <19",
-    "@vitejs/plugin-react": "^6.1.2",
-    "jsdom": "^30.1.3",
-    "vite": "^8.3.4",
+    "@vitejs/plugin-react": "^6.2.1",
+    "jsdom": "^31.0.0",
+    "vite": "^8.3.6",
     "vite-plugin-static-copy": "^4.1.1",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   },
   "peerDependencies": {
-    "@azure/msal-node": "^5.6.0",
+    "@azure/msal-node": "^7.2.0",
     "@fortawesome/fontawesome-free": "^7.3.1",
     "bootstrap": "^5.3.8",
     "electron": "^43.4.0",
