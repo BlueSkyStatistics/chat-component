@@ -31,9 +31,8 @@ env:
   GITLEAKS_VERSION: '8.21.2'
   OSV_SCANNER_VERSION: '1.9.1'
   SEMGREP_VERSION: '1.182.1'
-  RESULTS: ${{ github.workspace }}/../scan-results
-  REPORT: ${{ github.workspace }}/../scan-report
-  TOOLS: ${{ github.workspace }}/../scan-tools
+  # RESULTS, REPORT and TOOLS are set under $RUNNER_TEMP in the first step:
+  # upload-artifact rejects paths that contain '..'.
 
 jobs:
   scan:
@@ -56,6 +55,8 @@ jobs:
 
       - name: Install scanners
         run: |
+          RESULTS="$RUNNER_TEMP/scan-results" REPORT="$RUNNER_TEMP/scan-report" TOOLS="$RUNNER_TEMP/scan-tools"
+          { echo "RESULTS=$RESULTS"; echo "REPORT=$REPORT"; echo "TOOLS=$TOOLS"; } >> "$GITHUB_ENV"
           echo "SCAN_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=security-report-${SCAN_BRANCH//\//-}" >> "$GITHUB_ENV"
           mkdir -p "$RESULTS" "$REPORT" "$TOOLS/bin"
