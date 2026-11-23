@@ -17,7 +17,7 @@ import {
     migrateModelConfiguration,
 } from './utils/modelConfig'
 import {ATTACHMENT_PAGE_CHARS, paginateAttachmentResult} from './utils/attachmentPaging'
-import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
+import {registerModelTool} from './utils/streamingHandlers/tooling'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
@@ -501,15 +501,10 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
         };
     }, [])
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-        const existingApi = window.electronApi || {chat: {}}
-        window.electronApi.chat = {
-            ...existingApi.chat || {},
-            getRegisteredModelTools,
-            executeRegisteredToolCall
-        }
-    }, [getRegisteredModelTools, executeRegisteredToolCall])
+    // getRegisteredModelTools / executeRegisteredToolCall reach the host through the return value of
+    // initChatComponent(). They used to be copied onto window.electronApi.chat as well, which nothing
+    // read; once the host enables Electron contextIsolation, window.electronApi is a frozen object and
+    // that assignment throws ("Cannot add property chat, object is not extensible").
 
     useEffect(() => {
         const unregister = registerModelTool({
