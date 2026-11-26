@@ -78,7 +78,7 @@ jobs:
           
           # Create npm-compatible tarball
           npm pack
-          cp bluesky-chat-*.tgz bluesky-chat-latest.tgz
+          cp bluesky-chat-*.tgz bluesky-chat.tgz
 
       - name: Get current version
         id: version
@@ -94,7 +94,7 @@ jobs:
           files: |
             chat-component.zip
             chat-component.asar
-            bluesky-chat-*.tgz
+            bluesky-chat.tgz
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
