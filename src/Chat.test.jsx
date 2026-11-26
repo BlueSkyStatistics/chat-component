@@ -242,3 +242,114 @@ describe('Chat tool call visibility', () => {
         expect(container.textContent).toContain('done')
     })
 })
+
+describe('Chat request errors', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks()
+        global.ResizeObserver = class {
+            observe() {}
+            disconnect() {}
+        }
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+            cb()
+            return 1
+        })
+        vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        cleanup()
+    })
+
+    const send = async (messageStreamingHandler, options = {}) => {
+        const view = render(
+            <Chat
+                modelStorage={makeModelStorage()}
+                conversationStorage={null}
+                onConversationError={() => {}}
+                options={{addModelsAllowed: true, ...options}}
+                messageStreamingHandler={messageStreamingHandler}
+            />
+        )
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Send'})).toBeTruthy())
+        await flushPromises()
+        fireEvent.change(screen.getByPlaceholderText('Type a message... (Shift+Enter for new line)'), {
+            target: {value: 'hello'},
+        })
+        fireEvent.click(screen.getByRole('button', {name: 'Send'}))
+        return view
+    }
+
+    const errorTexts = (container) => [...container.querySelectorAll('[data-testid^="message-"]')]
+        .map((el) => el.textContent)
+        .filter((text) => text.includes('**'))
+
+    it('replaces the pending reply with a timeout error when the request goes quiet', async () => {
+        // Never settles and ignores the abort signal, like a hung connection.
+        const handler = vi.fn(() => new Promise(() => {}))
+        const {container} = await send(handler, {requestTimeoutMs: 50})
+        await waitFor(() => expect(container.textContent).toContain('Request timed out'))
+        expect(container.querySelector('.chat-thinking')).toBeNull()
+        expect(screen.getByRole('button', {name: 'Send'})).toBeTruthy()
+        expect(errorTexts(container)).toHaveLength(1)
+    })
+
+    it('keeps waiting while data keeps arriving', async () => {
+        const handler = vi.fn(async (_messages, onUpdate, _model, _signal, {onActivity}) => {
+            for (let i = 0; i < 5; i += 1) {
+                await new Promise((resolve) => setTimeout(resolve, 30))
+                onActivity()
+            }
+            onUpdate('slow but fine')
+        })
+        const {container} = await send(handler, {requestTimeoutMs: 60})
+        await waitFor(() => expect(container.textContent).toContain('slow but fine'))
+        expect(container.textContent).not.toContain('timed out')
+    })
+
+    it('does not time out while a tool is running', async () => {
+        const handler = vi.fn(async (_messages, onUpdate, _model, _signal, {onToolCallEvent}) => {
+            onToolCallEvent({callId: 'c1', name: 'slow_tool', status: 'running'})
+            await new Promise((resolve) => setTimeout(resolve, 150))
+            onToolCallEvent({callId: 'c1', name: 'slow_tool', status: 'succeeded'})
+            onUpdate('tool done')
+        })
+        const {container} = await send(handler, {requestTimeoutMs: 50})
+        await waitFor(() => expect(container.textContent).toContain('tool done'))
+        expect(container.textContent).not.toContain('timed out')
+    })
+
+    it('shows the error in place of the empty reply when the handler throws', async () => {
+        const handler = vi.fn(async () => {
+            throw new TypeError('Failed to fetch')
+        })
+        const {container} = await send(handler)
+        await waitFor(() => expect(container.textContent).toContain('Network error'))
+        expect(errorTexts(container)).toHaveLength(1)
+    })
+
+    it('keeps partial text and adds the error after it', async () => {
+        const handler = vi.fn(async (_messages, onUpdate) => {
+            onUpdate('partial answer')
+            throw new Error('stream cut')
+        })
+        const {container} = await send(handler)
+        await waitFor(() => expect(container.textContent).toContain('stream cut'))
+        expect(container.textContent).toContain('partial answer')
+    })
+
+    it('reports an empty response', async () => {
+        const {container} = await send(vi.fn(async () => {}))
+        await waitFor(() => expect(container.textContent).toContain('empty response'))
+    })
+
+    it('shows nothing when the user presses Stop', async () => {
+        const handler = vi.fn(() => new Promise(() => {}))
+        const {container} = await send(handler, {requestTimeoutMs: 0})
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Stop'})).toBeTruthy())
+        fireEvent.click(screen.getByRole('button', {name: 'Stop'}))
+        await waitFor(() => expect(screen.getByRole('button', {name: 'Send'})).toBeTruthy())
+        expect(errorTexts(container)).toHaveLength(0)
+    })
+})

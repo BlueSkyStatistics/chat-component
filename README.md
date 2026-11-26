@@ -73,6 +73,22 @@ arguments. Their third argument is now a resolved runtime model: manual and
 OpenAI models include `endpoint` and `apiKey`, while every linked model also
 includes `credential` metadata.
 
+### Request errors and timeouts
+
+If a request fails, the empty reply placeholder is replaced with an error
+message (timeouts, network errors, HTTP errors with the provider's message,
+errors sent inside the stream, and empty replies). If part of a reply had
+already arrived it is kept and the error is shown after it. Pressing Stop
+shows nothing.
+
+A request is stopped when no data arrives for `options.requestTimeoutMs`
+(default `120000`, `0` turns it off). The countdown restarts on every chunk
+received and is paused while a tool is running. A custom
+`messageStreamingHandler` should call `callbacks.onActivity()` whenever it
+receives data that isn't visible text (for example reasoning events), so a
+long-thinking model isn't cut off, and should honour the abort signal it is
+given. Even if it doesn't, the chat stops waiting on timeout.
+
 ## Conversation Management
 
 Conversation management is **opt-in**. When a host app supplies a
@@ -144,7 +160,8 @@ console.
 ### Runtime options
 
 The fifth argument of `initChatComponent` is an `options` object
-(`addModelsAllowed`, `showCredentialLabel`, `titleMaxChars`, `showToolCalls`).
+(`addModelsAllowed`, `showCredentialLabel`, `titleMaxChars`, `showToolCalls`,
+`requestTimeoutMs`).
 To change options after mounting, call `updateChatOptions` with the keys to
 change. It merges them into the current options and re-renders the mounted
 chat in place, so the open conversation, its messages and the input box keep

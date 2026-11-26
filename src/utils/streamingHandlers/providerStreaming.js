@@ -2,6 +2,7 @@ import {getAzureAccessToken} from '../providers/azureAuth'
 import {apiCallStreaming} from './fetchApiRequest'
 import {executeRegisteredToolCall, getRegisteredModelToolsForResponsesAPI} from './tooling'
 import {createToolTurnGuard} from './toolTurnGuard'
+import {httpErrorFromResponse} from './requestErrors'
 
 const normalizeRole = (role) => {
     if (['system', 'user', 'assistant', 'developer'].includes(role)) return role
@@ -207,14 +208,7 @@ const streamResponses = async ({
         })
 
         if (!response.ok) {
-            let message = `HTTP error! status: ${response.status}`
-            try {
-                const errorData = await response.json()
-                message = `HTTP error! ${errorData?.error?.message || JSON.stringify(errorData)}`
-            } catch (_) {
-                // response body wasn't JSON; keep the status-only message
-            }
-            throw new Error(message)
+            throw await httpErrorFromResponse(response)
         }
 
         const state = {
@@ -229,11 +223,12 @@ const streamResponses = async ({
         while (true) {
             const {done, value} = await reader.read()
             if (done) break
+            callbacks.onActivity?.()
             buffer += decoder.decode(value, {stream: true})
 
             let newlineIndex
             while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-                const line = buffer.slice(0, newlineIndex)
+                const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
                 buffer = buffer.slice(newlineIndex + 1)
                 if (line.startsWith('data: ')) {
                     const dataJson = line.slice(6)

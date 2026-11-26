@@ -18,6 +18,12 @@ import {
 } from './utils/modelConfig'
 import {ATTACHMENT_PAGE_CHARS, paginateAttachmentResult} from './utils/attachmentPaging'
 import {executeRegisteredToolCall, getRegisteredModelTools, registerModelTool} from './utils/streamingHandlers/tooling'
+import {
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    EmptyResponseError,
+    createIdleTimeout,
+    describeRequestError,
+} from './utils/streamingHandlers/requestErrors'
 
 const makeModelId = (model) => model?.id || makeLegacyModelId(model);
 
@@ -945,8 +951,18 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             attachments: []
         }])
 
-        abortControllerRef.current = new AbortController()
+        const controller = new AbortController()
+        abortControllerRef.current = controller
         setIsStreaming(true)
+
+        // fetch never times out on its own, so a stalled provider would leave
+        // "Thinking..." up forever. The idle timeout aborts the request after
+        // requestTimeoutMs without any data; it is paused while a tool runs.
+        const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+        const idle = createIdleTimeout(controller.signal, requestTimeoutMs)
+        const runningTools = new Set()
+        let receivedText = ''
+        let sawToolEvent = false
 
         // Tier 1 conversation guidance folds into the system message on every
         // request (unlike Tier 2 quick prompts, which are folded into the
@@ -967,6 +983,11 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
             .map((msg) => formatMessage(msg, {includeInlineAttachments: true}))
         ]
         const onUpdateStreamingMessage = accumulatedResponse => {
+            // A handler that ignores the abort signal may keep calling back
+            // after a timeout or Stop; the turn is over by then.
+            if (idle.signal.aborted) return
+            idle.touch()
+            receivedText = accumulatedResponse || ''
             setMessages(prev => {
                 const newMessages = [...prev]
                 const assistantIndex = newMessages.findIndex((msg) => msg.id === assistantMessageId)
@@ -979,36 +1000,98 @@ function Chat({modelStorage, conversationStorage, onConversationError, options, 
                 return newMessages
             })
         }
+        const onToolCallEvent = (event) => {
+            if (idle.signal.aborted) return
+            sawToolEvent = true
+            const callId = event?.callId || event?.call_id || event?.id
+            const status = event?.status
+            if (['succeeded', 'failed', 'completed', 'requesting', 'requested'].includes(status)) {
+                runningTools.delete(callId)
+            } else {
+                // 'running' or a tool's own progress status: waiting on the
+                // tool, not the model, so don't count it against the timeout.
+                runningTools.add(callId)
+            }
+            if (runningTools.size > 0) idle.pause()
+            else idle.touch()
+            upsertToolCallTrace(event)
+        }
 
         try {
+            idle.touch()
             const selectedCredential = credentials.find(
                 (credential) => credential.id === selectedModel.credentialId
             )
             const runtimeModel = getRuntimeModel(selectedModel, selectedCredential)
-            await messageStreamingHandler(
+            const handlerPromise = Promise.resolve().then(() => messageStreamingHandler(
                 preparedMessages,
                 onUpdateStreamingMessage,
                 runtimeModel,
-                abortControllerRef.current.signal,
+                idle.signal,
                 {
-                    onToolCallEvent: upsertToolCallTrace,
+                    onToolCallEvent,
                     onAttachments: (attachments) => attachToMessage(userMessageId, attachments),
+                    // Built-in handlers call this for every chunk received
+                    // (including events with no visible text, like reasoning)
+                    // so long-thinking models aren't cut off.
+                    onActivity: () => idle.touch(),
                     conversationId: activeConversationId,
                 }
-            )
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                return // Normal abort, do nothing
+            ))
+            // Settle on abort even if the handler never honours the signal.
+            const abortPromise = new Promise((_, reject) => {
+                const rejectWithReason = () => reject(idle.signal.reason ?? new DOMException('Aborted', 'AbortError'))
+                if (idle.signal.aborted) rejectWithReason()
+                else idle.signal.addEventListener('abort', rejectWithReason, {once: true})
+            })
+            handlerPromise.catch(() => {})
+            abortPromise.catch(() => {})
+            await Promise.race([handlerPromise, abortPromise])
+            if (!receivedText && !sawToolEvent) {
+                throw new EmptyResponseError()
             }
-            setMessages(prev => [...prev, {
-                content: `Error: ${error.message}`,
-                role: 'error',
-                id: Date.now() + 2
-            }])
+        } catch (error) {
+            if (idle.timedOut()) {
+                showRequestError(assistantMessageId, idle.error())
+            } else if (controller.signal.aborted) {
+                // Stopped by the user: nothing to report.
+            } else {
+                console.error('Chat request failed:', error)
+                showRequestError(assistantMessageId, error)
+            }
         } finally {
+            idle.dispose()
             setIsStreaming(false)
-            abortControllerRef.current = null
+            if (abortControllerRef.current === controller) {
+                abortControllerRef.current = null
+            }
         }
+    }
+
+    // Puts a failed request's error where its reply would have been: the
+    // empty placeholder becomes the error message. If part of a reply had
+    // already arrived, it is kept and the error follows it.
+    function showRequestError(assistantMessageId, error) {
+        const errorMessage = {
+            content: describeRequestError(error),
+            role: 'error',
+            showRaw: false,
+            showAttachments: false,
+            attachments: [],
+        }
+        setMessages(prev => {
+            const index = prev.findIndex((msg) => msg.id === assistantMessageId)
+            if (index !== -1 && isEmptyAssistantMessage(prev[index])) {
+                const next = [...prev]
+                next[index] = {...errorMessage, id: assistantMessageId}
+                return next
+            }
+            const errorItem = {...errorMessage, id: Date.now() + 2}
+            if (index === -1) return [...prev, errorItem]
+            const next = [...prev]
+            next.splice(index + 1, 0, errorItem)
+            return next
+        })
     }
 
     async function handleSubmit(e) {
